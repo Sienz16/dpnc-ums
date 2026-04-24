@@ -140,4 +140,6 @@ test('reopen preserves existing submissions and result while allowing selective 
         ->assertOk()
         ->assertJsonPath('data.mark_pm', '82.0')
         ->assertJsonPath('data.state', 'draft');
+
+    expect($existingAssignment->fresh()->submitted_at)->toBeNull();
 });

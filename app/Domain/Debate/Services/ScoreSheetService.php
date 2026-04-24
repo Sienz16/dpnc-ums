@@ -16,13 +16,12 @@ class ScoreSheetService
     public function __construct(
         private MatchStatusService $matchStatusService,
         private MatchResultCalculator $resultCalculator,
-    ) {
-    }
+    ) {}
 
     protected const string REOPENED_MATCH_EDIT_LOCK_MESSAGE = 'Submitted score sheets are locked unless match is reopened.';
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     public function saveDraft(DebateMatch $match, User $judge, array $payload): ScoreSheet
     {
@@ -69,12 +68,14 @@ class ScoreSheetService
 
             $scoreSheet->save();
 
+            $assignment->update(['submitted_at' => null]);
+
             return $scoreSheet->fresh();
         });
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     public function submit(DebateMatch $match, User $judge, array $payload): ScoreSheet
     {
@@ -107,7 +108,7 @@ class ScoreSheetService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     protected function computeTotals(array $payload): array
@@ -122,10 +123,15 @@ class ScoreSheetService
             + (float) $payload['mark_p1']
             + (float) $payload['mark_penggulungan_opp'];
 
+        $calculatedMargin = round(abs($govTotal - $oppTotal), 1);
+        if ($calculatedMargin === 0.0) {
+            throw new InvalidArgumentException('Team totals cannot be tied.');
+        }
+
         return [
             'gov_total' => round($govTotal, 1),
             'opp_total' => round($oppTotal, 1),
-            'margin' => round((float) $payload['margin'], 1),
+            'margin' => $calculatedMargin,
             'winner_side' => $govTotal > $oppTotal
                 ? TeamSide::Government
                 : TeamSide::Opposition,

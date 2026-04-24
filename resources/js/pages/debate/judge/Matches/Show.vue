@@ -3,7 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { useHttp } from '@inertiajs/vue3';
 import { usePage } from '@inertiajs/vue3';
 import { ArrowLeft, Shield, CheckCircle2, Save, Send, AlertTriangle } from 'lucide-vue-next';
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, watchEffect } from 'vue';
 import { toast } from 'vue-sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -115,6 +115,14 @@ const totals = computed(() => {
     const winner: WinnerSide = gov > opp ? 'government' : 'opposition';
 
     return { gov, opp, winner };
+});
+
+const calculatedMargin = computed(() => {
+    return Math.abs(totals.value.gov - totals.value.opp);
+});
+
+watchEffect(() => {
+    scoreForm.margin = Number(calculatedMargin.value.toFixed(1));
 });
 
 const checkIn = async () => {
@@ -272,7 +280,7 @@ const isLocked = computed(() => {
                                     type="number"
                                     step="0.5"
                                     min="0"
-                                    :disabled="isLocked"
+                                    readonly
                                     class="h-9 w-28 text-right font-bold"
                                 />
                             </div>

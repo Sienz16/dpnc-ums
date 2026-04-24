@@ -176,3 +176,61 @@ test('match auto completes normally when all assigned judges submit', function (
 
     $editAttempt->assertUnprocessable();
 });
+
+test('judge submission stores the calculated margin from team totals', function () {
+    ['match' => $match, 'judges' => $judges, 'best_debater_member_id' => $memberId] = makeScoringFixture();
+
+    $payload = [
+        'mark_pm' => 76,
+        'mark_tpm' => 76,
+        'mark_m1' => 76,
+        'mark_kp' => 75,
+        'mark_tkp' => 75,
+        'mark_p1' => 75,
+        'mark_penggulungan_gov' => 75,
+        'mark_penggulungan_opp' => 74,
+        'margin' => 99,
+        'best_debater_member_id' => $memberId,
+    ];
+
+    $this->actingAs($judges[0])->postJson("/judge/matches/{$match->id}/check-in")->assertOk();
+
+    $this->actingAs($judges[0])
+        ->postJson("/judge/matches/{$match->id}/score-sheet/submit", $payload)
+        ->assertOk()
+        ->assertJsonPath('data.margin', '4.0');
+});
+
+test('judge match endpoints only expose the authenticated judges assignment data', function () {
+    ['match' => $match, 'judges' => $judges, 'best_debater_member_id' => $memberId] = makeScoringFixture();
+
+    $payload = [
+        'mark_pm' => 76,
+        'mark_tpm' => 76,
+        'mark_m1' => 76,
+        'mark_kp' => 75,
+        'mark_tkp' => 75,
+        'mark_p1' => 75,
+        'mark_penggulungan_gov' => 75,
+        'mark_penggulungan_opp' => 74,
+        'margin' => 2,
+        'best_debater_member_id' => $memberId,
+    ];
+
+    foreach ($judges as $judge) {
+        $this->actingAs($judge)->postJson("/judge/matches/{$match->id}/check-in")->assertOk();
+    }
+
+    $this->actingAs($judges[1])->postJson("/judge/matches/{$match->id}/score-sheet/submit", $payload)->assertOk();
+
+    $indexResponse = $this->actingAs($judges[0])->getJson('/judge/matches');
+    $indexResponse->assertOk();
+    $indexResponse->assertJsonPath('data.0.judge_assignments.0.judge_id', $judges[0]->id);
+    expect($indexResponse->json('data.0.judge_assignments'))->toHaveCount(1);
+
+    $showResponse = $this->actingAs($judges[0])->getJson("/judge/matches/{$match->id}");
+    $showResponse->assertOk();
+    $showResponse->assertJsonPath('data.judge_assignments.0.judge_id', $judges[0]->id);
+    $showResponse->assertJsonMissingPath('data.score_sheets');
+    expect($showResponse->json('data.judge_assignments'))->toHaveCount(1);
+});

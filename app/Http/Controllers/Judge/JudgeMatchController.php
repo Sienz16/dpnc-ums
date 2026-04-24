@@ -11,9 +11,18 @@ class JudgeMatchController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $userId = $request->user()->id;
+
         $matches = DebateMatch::query()
-            ->whereHas('judgeAssignments', fn ($query) => $query->where('judge_id', $request->user()->id))
-            ->with(['round', 'room', 'governmentTeam', 'oppositionTeam', 'judgeAssignments', 'result'])
+            ->whereHas('judgeAssignments', fn ($query) => $query->where('judge_id', $userId))
+            ->with([
+                'round',
+                'room',
+                'governmentTeam',
+                'oppositionTeam',
+                'judgeAssignments' => fn ($query) => $query->where('judge_id', $userId),
+                'result',
+            ])
             ->orderByDesc('scheduled_at')
             ->orderByDesc('id')
             ->get();
@@ -25,14 +34,15 @@ class JudgeMatchController extends Controller
     {
         $this->authorize('view', $match);
 
+        $userId = (int) auth()->id();
+
         return response()->json([
             'data' => $match->load([
                 'round',
                 'room',
                 'governmentTeam.members',
                 'oppositionTeam.members',
-                'judgeAssignments.judge',
-                'scoreSheets',
+                'judgeAssignments' => fn ($query) => $query->where('judge_id', $userId),
                 'result.bestSpeaker',
             ]),
         ]);

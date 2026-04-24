@@ -109,6 +109,93 @@ test('calculator picks best speaker by votes and tie breaks by average speaker m
     expect($result->best_speaker_member_id)->toBe($govTpm->id);
 });
 
+test('calculator resolves tied best speaker votes without crashing', function () {
+    $governmentTeam = Team::factory()->create();
+    $oppositionTeam = Team::factory()->create();
+
+    $govPm = TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerOne]);
+    $govTpm = TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerTwo]);
+    TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerThree]);
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerOne]);
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerTwo]);
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerThree]);
+
+    $match = DebateMatch::factory()->create([
+        'round_id' => Round::factory()->create()->id,
+        'room_id' => Room::factory()->create()->id,
+        'government_team_id' => $governmentTeam->id,
+        'opposition_team_id' => $oppositionTeam->id,
+        'judge_panel_size' => 3,
+    ]);
+
+    $judges = User::factory()->count(3)->judge()->create();
+
+    ScoreSheet::query()->create([
+        'match_id' => $match->id,
+        'judge_id' => $judges[0]->id,
+        'mark_pm' => 82,
+        'mark_tpm' => 70,
+        'mark_m1' => 70,
+        'mark_kp' => 65,
+        'mark_tkp' => 65,
+        'mark_p1' => 65,
+        'mark_penggulungan_gov' => 70,
+        'mark_penggulungan_opp' => 65,
+        'gov_total' => 292,
+        'opp_total' => 260,
+        'margin' => 32,
+        'winner_side' => TeamSide::Government,
+        'best_debater_member_id' => $govPm->id,
+        'state' => ScoreSheetState::Submitted,
+        'submitted_at' => now(),
+    ]);
+
+    ScoreSheet::query()->create([
+        'match_id' => $match->id,
+        'judge_id' => $judges[1]->id,
+        'mark_pm' => 68,
+        'mark_tpm' => 84,
+        'mark_m1' => 70,
+        'mark_kp' => 65,
+        'mark_tkp' => 65,
+        'mark_p1' => 65,
+        'mark_penggulungan_gov' => 70,
+        'mark_penggulungan_opp' => 65,
+        'gov_total' => 292,
+        'opp_total' => 260,
+        'margin' => 32,
+        'winner_side' => TeamSide::Government,
+        'best_debater_member_id' => $govTpm->id,
+        'state' => ScoreSheetState::Submitted,
+        'submitted_at' => now(),
+    ]);
+
+    ScoreSheet::query()->create([
+        'match_id' => $match->id,
+        'judge_id' => $judges[2]->id,
+        'mark_pm' => 81,
+        'mark_tpm' => 74,
+        'mark_m1' => 70,
+        'mark_kp' => 65,
+        'mark_tkp' => 65,
+        'mark_p1' => 65,
+        'mark_penggulungan_gov' => 70,
+        'mark_penggulungan_opp' => 65,
+        'gov_total' => 295,
+        'opp_total' => 260,
+        'margin' => 35,
+        'winner_side' => TeamSide::Government,
+        'best_debater_member_id' => $govPm->id,
+        'state' => ScoreSheetState::Submitted,
+        'submitted_at' => now(),
+    ]);
+
+    $result = app(MatchResultCalculator::class)->recalculate($match->fresh(), false, false);
+
+    expect($result)->not->toBeNull();
+    expect($result->best_speaker_member_id)->toBe($govPm->id);
+});
+
 test('team ranking sorts by win count then judge count then margin then score', function () {
     $teamA = Team::factory()->create(['name' => 'Alpha']);
     $teamB = Team::factory()->create(['name' => 'Beta']);

@@ -54,7 +54,7 @@ class MatchResultCalculator
     }
 
     /**
-     * @param Collection<int, ScoreSheet> $submittedSheets
+     * @param  Collection<int, ScoreSheet>  $submittedSheets
      */
     protected function resolveBestSpeakerMemberId(DebateMatch $match, Collection $submittedSheets): ?int
     {
@@ -83,7 +83,7 @@ class MatchResultCalculator
             return $candidateIds->first();
         }
 
-        $averageScores = $candidateIds->mapWithKeys(function (int $memberId) use ($submittedSheets, $membersById): array {
+        $averageScores = $candidateIds->mapWithKeys(function (int $memberId) use ($match, $submittedSheets, $membersById): array {
             /** @var TeamMember|null $member */
             $member = $membersById->get($memberId);
 
