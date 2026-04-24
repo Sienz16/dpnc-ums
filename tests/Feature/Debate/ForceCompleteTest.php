@@ -66,8 +66,8 @@ test('superadmin can force complete and creates provisional result with audit lo
         'mark_kp' => 75,
         'mark_tkp' => 75,
         'mark_p1' => 75,
-        'mark_penggulungan_gov' => 75,
-        'mark_penggulungan_opp' => 74,
+        'mark_penggulungan_gov' => 35,
+        'mark_penggulungan_opp' => 34,
         'margin' => 2,
         'best_debater_member_id' => $bestSpeakerId,
     ];
@@ -107,8 +107,8 @@ test('reopen preserves existing submissions and result while allowing selective 
         'mark_kp' => 75,
         'mark_tkp' => 75,
         'mark_p1' => 75,
-        'mark_penggulungan_gov' => 75,
-        'mark_penggulungan_opp' => 74,
+        'mark_penggulungan_gov' => 35,
+        'mark_penggulungan_opp' => 34,
         'margin' => 2,
         'best_debater_member_id' => $bestSpeakerId,
     ];

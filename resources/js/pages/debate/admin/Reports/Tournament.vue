@@ -6,9 +6,19 @@ import { computed, onMounted, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { unwrapCollection, unwrapData } from '@/lib/httpPayload';
 import admin from '@/routes/admin';
 import type { Match, SpeakerRanking, TeamRanking, User } from '@/types/debate';
+
+type SpeakerRankMode = 'markah' | 'pendebat_terbaik';
 
 defineOptions({
     layout: {
@@ -31,6 +41,7 @@ const speakerRankings = ref<SpeakerRanking[]>([]);
 const matches = ref<Match[]>([]);
 const judges = ref<User[]>([]);
 const loading = ref(true);
+const speakerRankMode = ref<SpeakerRankMode>('markah');
 
 const fetchReport = async () => {
     loading.value = true;
@@ -68,8 +79,32 @@ const summary = computed(() => ({
     total_judges: judges.value.length,
 }));
 
-const topTeams = computed(() => teamRankings.value.slice(0, 5));
-const topSpeakers = computed(() => speakerRankings.value.slice(0, 5));
+const topTeams = computed(() => teamRankings.value.slice(0, 10));
+const topSpeakers = computed(() => {
+    const items = [...speakerRankings.value];
+
+    if (speakerRankMode.value === 'pendebat_terbaik') {
+        return items
+            .sort((left, right) => {
+                if (right.best_speaker_wins_count !== left.best_speaker_wins_count) {
+                    return right.best_speaker_wins_count - left.best_speaker_wins_count;
+                }
+
+                return right.average_official_points_per_appearance - left.average_official_points_per_appearance;
+            })
+            .slice(0, 10);
+    }
+
+    return items
+        .sort((left, right) => {
+            if (right.average_official_points_per_appearance !== left.average_official_points_per_appearance) {
+                return right.average_official_points_per_appearance - left.average_official_points_per_appearance;
+            }
+
+            return right.best_speaker_wins_count - left.best_speaker_wins_count;
+        })
+        .slice(0, 10);
+});
 
 const printReport = (): void => {
     window.print();
@@ -143,7 +178,7 @@ const printReport = (): void => {
                 <section class="space-y-3">
                     <h2 class="text-base font-semibold flex items-center gap-2">
                         <Trophy class="w-4 h-4 text-yellow-500" />
-                        5 Pasukan Teratas
+                        10 Pasukan Teratas
                     </h2>
                     <div class="overflow-auto rounded-xl border bg-background">
                         <table class="w-full text-sm">
@@ -167,10 +202,24 @@ const printReport = (): void => {
 
                 <!-- Top Speakers -->
                 <section class="space-y-3">
-                    <h2 class="text-base font-semibold flex items-center gap-2">
-                        <Medal class="w-4 h-4 text-amber-600" />
-                        5 Pendebat Teratas
-                    </h2>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <h2 class="text-base font-semibold flex items-center gap-2">
+                            <Medal class="w-4 h-4 text-amber-600" />
+                            10 Pendebat Teratas
+                        </h2>
+                        <div class="w-full space-y-2 sm:w-56">
+                            <Label for="speaker-rank-mode">Rank</Label>
+                            <Select v-model="speakerRankMode">
+                                <SelectTrigger id="speaker-rank-mode">
+                                    <SelectValue placeholder="Pilih ranking" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="markah">Markah</SelectItem>
+                                    <SelectItem value="pendebat_terbaik">Pendebat Terbaik</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
                     <div class="overflow-auto rounded-xl border bg-background">
                         <table class="w-full text-sm">
                             <thead class="border-b bg-muted/30">

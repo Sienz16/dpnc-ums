@@ -3,23 +3,34 @@ import { Head } from '@inertiajs/vue3';
 import { useHttp } from '@inertiajs/vue3';
 import { Link } from '@inertiajs/vue3';
 import { Award, Star } from 'lucide-vue-next';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { unwrapCollection } from '@/lib/httpPayload';
 import admin from '@/routes/admin';
+import debate from '@/routes/debate';
 import type { SpeakerRanking } from '@/types/debate';
+
+type SpeakerRankingFilter = 'highest_mark' | 'highest_best_speaker_win';
 
 defineOptions({
     layout: {
         breadcrumbs: [
             {
                 title: 'Kedudukan',
-                href: admin.rankings.teams().url,
+                href: debate.admin.rankings.teams().url,
             },
             {
                 title: 'Pendebat',
-                href: admin.rankings.speakers().url,
+                href: debate.admin.rankings.speakers().url,
             },
         ],
     },
@@ -28,6 +39,7 @@ defineOptions({
 const http = useHttp();
 const rankings = ref<SpeakerRanking[]>([]);
 const loading = ref(true);
+const rankingFilter = ref<SpeakerRankingFilter>('highest_mark');
 
 const fetchRankings = async () => {
     loading.value = true;
@@ -44,17 +56,63 @@ const fetchRankings = async () => {
 };
 
 onMounted(fetchRankings);
+
+const filteredRankings = computed(() => {
+    const items = [...rankings.value];
+
+    if (rankingFilter.value === 'highest_best_speaker_win') {
+        return items.sort((left, right) => {
+            if (right.best_speaker_wins_count !== left.best_speaker_wins_count) {
+                return right.best_speaker_wins_count - left.best_speaker_wins_count;
+            }
+
+            if (right.average_official_points_per_appearance !== left.average_official_points_per_appearance) {
+                return right.average_official_points_per_appearance - left.average_official_points_per_appearance;
+            }
+
+            return right.average_score_per_appearance - left.average_score_per_appearance;
+        });
+    }
+
+    return items.sort((left, right) => {
+        if (right.average_official_points_per_appearance !== left.average_official_points_per_appearance) {
+            return right.average_official_points_per_appearance - left.average_official_points_per_appearance;
+        }
+
+        if (right.best_speaker_wins_count !== left.best_speaker_wins_count) {
+            return right.best_speaker_wins_count - left.best_speaker_wins_count;
+        }
+
+        return right.average_score_per_appearance - left.average_score_per_appearance;
+    });
+});
 </script>
 
 <template>
     <Head title="Kedudukan Pendebat" />
 
     <div class="p-6 space-y-6">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <Heading title="Kedudukan Pendebat" description="Prestasi individu pendebat merentas semua perlawanan." />
-            <div class="flex gap-2">
-                <Button variant="outline" as-child>
-                    <Link :href="admin.rankings.teams().url">Kedudukan Pasukan</Link>
+            <div class="flex w-full flex-col gap-3 xl:w-auto xl:flex-row xl:items-end xl:justify-end">
+                <div class="min-w-0 flex-1 space-y-2 xl:w-72 xl:flex-none">
+                    <Label for="speaker-ranking-filter">Tapis Kedudukan</Label>
+                    <Select v-model="rankingFilter">
+                        <SelectTrigger id="speaker-ranking-filter">
+                            <SelectValue placeholder="Pilih susunan" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="highest_mark">
+                                Markah Tertinggi
+                            </SelectItem>
+                            <SelectItem value="highest_best_speaker_win">
+                                Menang Pendebat Terbaik Tertinggi
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <Button variant="outline" as-child class="w-full xl:w-auto">
+                    <Link :href="debate.admin.rankings.teams().url">Kedudukan Pasukan</Link>
                 </Button>
             </div>
         </div>
@@ -80,12 +138,12 @@ onMounted(fetchRankings);
                                     <td class="p-4 align-middle"><div class="h-4 w-12 animate-pulse rounded bg-muted mx-auto"></div></td>
                                 </tr>
                             </template>
-                            <tr v-else-if="rankings.length === 0" class="border-b transition-colors">
+                            <tr v-else-if="filteredRankings.length === 0" class="border-b transition-colors">
                                 <td colspan="5" class="p-8 text-center text-muted-foreground">
                                     Tiada kedudukan tersedia. Lengkapkan perlawanan untuk melihat statistik individu.
                                 </td>
                             </tr>
-                            <tr v-for="(speaker, index) in rankings" :key="speaker.speaker_id" class="border-b transition-colors hover:bg-muted/50">
+                            <tr v-for="(speaker, index) in filteredRankings" :key="speaker.speaker_id" class="border-b transition-colors hover:bg-muted/50">
                                 <td class="p-4 align-middle font-bold">
                                     <div class="flex items-center justify-center w-8 h-8 rounded-full" 
                                          :class="{

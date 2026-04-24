@@ -237,3 +237,61 @@ test('team ranking sorts by win count then judge count then margin then score', 
     expect($rankings[0]['win_count'])->toBe(2);
     expect($rankings[0]['judge_count'])->toBe(5);
 });
+
+test('team ranking breaks ties by judge count then official margin then score', function () {
+    $teamA = Team::factory()->create(['name' => 'Alpha']);
+    $teamB = Team::factory()->create(['name' => 'Beta']);
+    $teamC = Team::factory()->create(['name' => 'Gamma']);
+
+    $match1 = DebateMatch::factory()->create([
+        'government_team_id' => $teamA->id,
+        'opposition_team_id' => $teamB->id,
+    ]);
+
+    $match2 = DebateMatch::factory()->create([
+        'government_team_id' => $teamA->id,
+        'opposition_team_id' => $teamC->id,
+    ]);
+
+    $match3 = DebateMatch::factory()->create([
+        'government_team_id' => $teamC->id,
+        'opposition_team_id' => $teamB->id,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match1->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 2,
+        'loser_vote_count' => 1,
+        'official_margin' => 6,
+        'official_team_score_government' => 290,
+        'official_team_score_opposition' => 284,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match2->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 1,
+        'loser_vote_count' => 0,
+        'official_margin' => 4,
+        'official_team_score_government' => 282,
+        'official_team_score_opposition' => 278,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match3->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 3,
+        'loser_vote_count' => 0,
+        'official_margin' => 5,
+        'official_team_score_government' => 276,
+        'official_team_score_opposition' => 271,
+    ]);
+
+    $rankings = app(RankingService::class)->teamRankings();
+
+    expect($rankings->pluck('team_name')->take(3)->all())->toBe(['Alpha', 'Gamma', 'Beta']);
+    expect($rankings[0]['judge_count'])->toBe(3);
+    expect((float) $rankings[0]['average_margin'])->toBe(5.0);
+    expect((float) $rankings[1]['average_margin'])->toBe(0.5);
+});

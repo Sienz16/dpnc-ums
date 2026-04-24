@@ -3,7 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import { useHttp } from '@inertiajs/vue3';
 import { usePage } from '@inertiajs/vue3';
 import { ArrowLeft, Shield, CheckCircle2, Save, Send, AlertTriangle } from 'lucide-vue-next';
-import { onMounted, ref, computed, watchEffect } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { toast } from 'vue-sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,23 @@ import { unwrapData } from '@/lib/httpPayload';
 import debate from '@/routes/debate';
 import judge from '@/routes/judge';
 import type { Match, ScoreSheet, WinnerSide } from '@/types/debate';
+
+type ScoreFieldKey =
+    | 'mark_pm'
+    | 'mark_tpm'
+    | 'mark_m1'
+    | 'mark_kp'
+    | 'mark_tkp'
+    | 'mark_p1'
+    | 'mark_penggulungan_gov'
+    | 'mark_penggulungan_opp';
+
+interface ScoreFieldMeta {
+    key: ScoreFieldKey;
+    label: string;
+    max: number;
+    recommendedRange: string;
+}
 
 const props = defineProps<{
     matchId: number;
@@ -117,13 +134,19 @@ const totals = computed(() => {
     return { gov, opp, winner };
 });
 
-const calculatedMargin = computed(() => {
-    return Math.abs(totals.value.gov - totals.value.opp);
-});
+const governmentScoreFields: ScoreFieldMeta[] = [
+    { key: 'mark_pm', label: 'Perdana Menteri', max: 100, recommendedRange: '75-85' },
+    { key: 'mark_tpm', label: 'Timbalan Perdana Menteri', max: 100, recommendedRange: '75-85' },
+    { key: 'mark_m1', label: 'Menteri 1', max: 100, recommendedRange: '75-85' },
+    { key: 'mark_penggulungan_gov', label: 'Penggulungan Kerajaan', max: 50, recommendedRange: '31-42' },
+];
 
-watchEffect(() => {
-    scoreForm.margin = Number(calculatedMargin.value.toFixed(1));
-});
+const oppositionScoreFields: ScoreFieldMeta[] = [
+    { key: 'mark_kp', label: 'Ketua Pembangkang', max: 100, recommendedRange: '75-85' },
+    { key: 'mark_tkp', label: 'Timbalan Ketua Pembangkang', max: 100, recommendedRange: '75-85' },
+    { key: 'mark_p1', label: 'Pembangkang 1', max: 100, recommendedRange: '75-85' },
+    { key: 'mark_penggulungan_opp', label: 'Penggulungan Pembangkang', max: 50, recommendedRange: '31-42' },
+];
 
 const checkIn = async () => {
     if (!matchData.value) {
@@ -191,6 +214,25 @@ const oppositionLineup = computed(() => sortMembersBySpeakerPosition(matchData.v
 const isLocked = computed(() => {
     return matchData.value?.status === 'completed' || scoreSheet.value?.state === 'submitted';
 });
+
+const speakerNameForField = (field: ScoreFieldMeta, side: WinnerSide): string | null => {
+    const lineup = side === 'government' ? governmentLineup.value : oppositionLineup.value;
+
+    if (field.key === 'mark_penggulungan_gov' || field.key === 'mark_penggulungan_opp') {
+        return null;
+    }
+
+    const indexByField: Record<string, number> = {
+        mark_pm: 0,
+        mark_tpm: 1,
+        mark_m1: 2,
+        mark_kp: 0,
+        mark_tkp: 1,
+        mark_p1: 2,
+    };
+
+    return lineup[indexByField[field.key]]?.full_name ?? null;
+};
 </script>
 
 <template>
@@ -274,15 +316,24 @@ const isLocked = computed(() => {
                                 </Badge>
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-xs font-bold uppercase">Margin</span>
-                                <Input
-                                    v-model="scoreForm.margin"
-                                    type="number"
-                                    step="0.5"
-                                    min="0"
-                                    readonly
-                                    class="h-9 w-28 text-right font-bold"
-                                />
+                                <div>
+                                    <span class="text-xs font-bold uppercase">Margin</span>
+                                    <p class="text-[11px] text-muted-foreground">Julat cadangan: 1-8</p>
+                                </div>
+                                <div class="text-right">
+                                    <Input
+                                        v-model="scoreForm.margin"
+                                        type="number"
+                                        step="0.5"
+                                        min="1"
+                                        max="8"
+                                        :disabled="isLocked"
+                                        class="h-9 w-28 text-right font-bold"
+                                    />
+                                    <p v-if="scoreForm.errors.margin" class="mt-1 text-[11px] text-destructive">
+                                        {{ scoreForm.errors.margin }}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </CardContent>
@@ -308,24 +359,37 @@ const isLocked = computed(() => {
                     <Card class="border-primary/20">
                         <CardHeader class="bg-primary/5 pb-4">
                             <CardTitle class="text-primary">Bahagian Kerajaan</CardTitle>
+                            <CardDescription>Had maksimum dan julat cadangan diambil terus daripada borang manual.</CardDescription>
                         </CardHeader>
                         <CardContent class="p-6 space-y-6">
                             <div class="space-y-4">
-                                <div class="grid grid-cols-4 items-center gap-4">
-                                    <Label class="col-span-3">{{ speakerRoleLabel('speaker_1', 'government') }}<span v-if="governmentLineup[0]"> - {{ governmentLineup[0].full_name }}</span></Label>
-                                    <Input v-model="scoreForm.mark_pm" type="number" step="0.5" :disabled="isLocked" />
-                                </div>
-                                <div class="grid grid-cols-4 items-center gap-4">
-                                    <Label class="col-span-3">{{ speakerRoleLabel('speaker_2', 'government') }}<span v-if="governmentLineup[1]"> - {{ governmentLineup[1].full_name }}</span></Label>
-                                    <Input v-model="scoreForm.mark_tpm" type="number" step="0.5" :disabled="isLocked" />
-                                </div>
-                                <div class="grid grid-cols-4 items-center gap-4">
-                                    <Label class="col-span-3">{{ speakerRoleLabel('speaker_3', 'government') }}<span v-if="governmentLineup[2]"> - {{ governmentLineup[2].full_name }}</span></Label>
-                                    <Input v-model="scoreForm.mark_m1" type="number" step="0.5" :disabled="isLocked" />
-                                </div>
-                                <div class="grid grid-cols-4 items-center gap-4 pt-4 border-t">
-                                    <Label class="col-span-3 font-bold">Penggulungan Kerajaan</Label>
-                                    <Input v-model="scoreForm.mark_penggulungan_gov" type="number" step="0.5" :disabled="isLocked" />
+                                <div
+                                    v-for="field in governmentScoreFields"
+                                    :key="field.key"
+                                    class="grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-4"
+                                    :class="field.key === 'mark_penggulungan_gov' ? 'pt-4 border-t' : ''"
+                                >
+                                    <div>
+                                        <Label class="font-medium">
+                                            {{ field.label }}
+                                            <span v-if="speakerNameForField(field, 'government')"> - {{ speakerNameForField(field, 'government') }}</span>
+                                        </Label>
+                                        <p class="mt-1 text-[11px] text-muted-foreground">
+                                            Maks {{ field.max }} • Julat cadangan {{ field.recommendedRange }}
+                                        </p>
+                                        <p v-if="scoreForm.errors[field.key]" class="mt-1 text-[11px] text-destructive">
+                                            {{ scoreForm.errors[field.key] }}
+                                        </p>
+                                    </div>
+                                    <Input
+                                        v-model="scoreForm[field.key]"
+                                        type="number"
+                                        step="0.5"
+                                        min="0"
+                                        :max="field.max"
+                                        :disabled="isLocked"
+                                        class="text-right"
+                                    />
                                 </div>
                             </div>
                         </CardContent>
@@ -335,24 +399,37 @@ const isLocked = computed(() => {
                     <Card class="border-destructive/20">
                         <CardHeader class="bg-destructive/5 pb-4">
                             <CardTitle class="text-destructive">Bahagian Pembangkang</CardTitle>
+                            <CardDescription>Rujuk julat cadangan dalam kurungan semasa memberi markah.</CardDescription>
                         </CardHeader>
                         <CardContent class="p-6 space-y-6">
                             <div class="space-y-4">
-                                <div class="grid grid-cols-4 items-center gap-4">
-                                    <Label class="col-span-3">{{ speakerRoleLabel('speaker_1', 'opposition') }}<span v-if="oppositionLineup[0]"> - {{ oppositionLineup[0].full_name }}</span></Label>
-                                    <Input v-model="scoreForm.mark_kp" type="number" step="0.5" :disabled="isLocked" />
-                                </div>
-                                <div class="grid grid-cols-4 items-center gap-4">
-                                    <Label class="col-span-3">{{ speakerRoleLabel('speaker_2', 'opposition') }}<span v-if="oppositionLineup[1]"> - {{ oppositionLineup[1].full_name }}</span></Label>
-                                    <Input v-model="scoreForm.mark_tkp" type="number" step="0.5" :disabled="isLocked" />
-                                </div>
-                                <div class="grid grid-cols-4 items-center gap-4">
-                                    <Label class="col-span-3">{{ speakerRoleLabel('speaker_3', 'opposition') }}<span v-if="oppositionLineup[2]"> - {{ oppositionLineup[2].full_name }}</span></Label>
-                                    <Input v-model="scoreForm.mark_p1" type="number" step="0.5" :disabled="isLocked" />
-                                </div>
-                                <div class="grid grid-cols-4 items-center gap-4 pt-4 border-t">
-                                    <Label class="col-span-3 font-bold">Penggulungan Pembangkang</Label>
-                                    <Input v-model="scoreForm.mark_penggulungan_opp" type="number" step="0.5" :disabled="isLocked" />
+                                <div
+                                    v-for="field in oppositionScoreFields"
+                                    :key="field.key"
+                                    class="grid grid-cols-[minmax(0,1fr)_8.5rem] items-center gap-4"
+                                    :class="field.key === 'mark_penggulungan_opp' ? 'pt-4 border-t' : ''"
+                                >
+                                    <div>
+                                        <Label class="font-medium">
+                                            {{ field.label }}
+                                            <span v-if="speakerNameForField(field, 'opposition')"> - {{ speakerNameForField(field, 'opposition') }}</span>
+                                        </Label>
+                                        <p class="mt-1 text-[11px] text-muted-foreground">
+                                            Maks {{ field.max }} • Julat cadangan {{ field.recommendedRange }}
+                                        </p>
+                                        <p v-if="scoreForm.errors[field.key]" class="mt-1 text-[11px] text-destructive">
+                                            {{ scoreForm.errors[field.key] }}
+                                        </p>
+                                    </div>
+                                    <Input
+                                        v-model="scoreForm[field.key]"
+                                        type="number"
+                                        step="0.5"
+                                        min="0"
+                                        :max="field.max"
+                                        :disabled="isLocked"
+                                        class="text-right"
+                                    />
                                 </div>
                             </div>
                         </CardContent>

@@ -95,8 +95,8 @@ test('reserve speaker cannot be selected as best debater', function () {
         'mark_kp' => 75,
         'mark_tkp' => 75,
         'mark_p1' => 75,
-        'mark_penggulungan_gov' => 75,
-        'mark_penggulungan_opp' => 74,
+        'mark_penggulungan_gov' => 35,
+        'mark_penggulungan_opp' => 34,
         'margin' => 2,
         'best_debater_member_id' => $reserveSpeaker->id,
     ]);
@@ -127,8 +127,8 @@ test('judge cannot submit before check in', function () {
         'mark_kp' => 75,
         'mark_tkp' => 75,
         'mark_p1' => 75,
-        'mark_penggulungan_gov' => 75,
-        'mark_penggulungan_opp' => 74,
+        'mark_penggulungan_gov' => 35,
+        'mark_penggulungan_opp' => 34,
         'margin' => 2,
         'best_debater_member_id' => $memberId,
     ];
@@ -148,8 +148,8 @@ test('match auto completes normally when all assigned judges submit', function (
         'mark_kp' => 75,
         'mark_tkp' => 75,
         'mark_p1' => 75,
-        'mark_penggulungan_gov' => 75,
-        'mark_penggulungan_opp' => 74,
+        'mark_penggulungan_gov' => 35,
+        'mark_penggulungan_opp' => 34,
         'margin' => 2,
         'best_debater_member_id' => $memberId,
     ];
@@ -177,7 +177,7 @@ test('match auto completes normally when all assigned judges submit', function (
     $editAttempt->assertUnprocessable();
 });
 
-test('judge submission stores the calculated margin from team totals', function () {
+test('judge submission stores the manual margin entered by the judge', function () {
     ['match' => $match, 'judges' => $judges, 'best_debater_member_id' => $memberId] = makeScoringFixture();
 
     $payload = [
@@ -187,9 +187,9 @@ test('judge submission stores the calculated margin from team totals', function 
         'mark_kp' => 75,
         'mark_tkp' => 75,
         'mark_p1' => 75,
-        'mark_penggulungan_gov' => 75,
-        'mark_penggulungan_opp' => 74,
-        'margin' => 99,
+        'mark_penggulungan_gov' => 35,
+        'mark_penggulungan_opp' => 34,
+        'margin' => 7,
         'best_debater_member_id' => $memberId,
     ];
 
@@ -198,7 +198,7 @@ test('judge submission stores the calculated margin from team totals', function 
     $this->actingAs($judges[0])
         ->postJson("/judge/matches/{$match->id}/score-sheet/submit", $payload)
         ->assertOk()
-        ->assertJsonPath('data.margin', '4.0');
+        ->assertJsonPath('data.margin', '7.0');
 });
 
 test('judge match endpoints only expose the authenticated judges assignment data', function () {
@@ -211,8 +211,8 @@ test('judge match endpoints only expose the authenticated judges assignment data
         'mark_kp' => 75,
         'mark_tkp' => 75,
         'mark_p1' => 75,
-        'mark_penggulungan_gov' => 75,
-        'mark_penggulungan_opp' => 74,
+        'mark_penggulungan_gov' => 35,
+        'mark_penggulungan_opp' => 34,
         'margin' => 2,
         'best_debater_member_id' => $memberId,
     ];
@@ -233,4 +233,48 @@ test('judge match endpoints only expose the authenticated judges assignment data
     $showResponse->assertJsonPath('data.judge_assignments.0.judge_id', $judges[0]->id);
     $showResponse->assertJsonMissingPath('data.score_sheets');
     expect($showResponse->json('data.judge_assignments'))->toHaveCount(1);
+});
+
+test('judge cannot submit reply speech marks above the manual limit', function () {
+    ['match' => $match, 'judges' => $judges, 'best_debater_member_id' => $memberId] = makeScoringFixture();
+
+    $this->actingAs($judges[0])->postJson("/judge/matches/{$match->id}/check-in")->assertOk();
+
+    $this->actingAs($judges[0])
+        ->postJson("/judge/matches/{$match->id}/score-sheet/submit", [
+            'mark_pm' => 80,
+            'mark_tpm' => 80,
+            'mark_m1' => 80,
+            'mark_kp' => 79,
+            'mark_tkp' => 79,
+            'mark_p1' => 79,
+            'mark_penggulungan_gov' => 51,
+            'mark_penggulungan_opp' => 35,
+            'margin' => 2,
+            'best_debater_member_id' => $memberId,
+        ])
+        ->assertUnprocessable()
+        ->assertInvalid(['mark_penggulungan_gov']);
+});
+
+test('judge cannot submit margin above the manual limit', function () {
+    ['match' => $match, 'judges' => $judges, 'best_debater_member_id' => $memberId] = makeScoringFixture();
+
+    $this->actingAs($judges[0])->postJson("/judge/matches/{$match->id}/check-in")->assertOk();
+
+    $this->actingAs($judges[0])
+        ->postJson("/judge/matches/{$match->id}/score-sheet/submit", [
+            'mark_pm' => 80,
+            'mark_tpm' => 80,
+            'mark_m1' => 80,
+            'mark_kp' => 79,
+            'mark_tkp' => 79,
+            'mark_p1' => 79,
+            'mark_penggulungan_gov' => 35,
+            'mark_penggulungan_opp' => 34,
+            'margin' => 9,
+            'best_debater_member_id' => $memberId,
+        ])
+        ->assertUnprocessable()
+        ->assertInvalid(['margin']);
 });

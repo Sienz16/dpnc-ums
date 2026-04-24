@@ -7,6 +7,7 @@ import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
 import { unwrapCollection } from '@/lib/httpPayload';
 import admin from '@/routes/admin';
+import debate from '@/routes/debate';
 import type { TeamRanking } from '@/types/debate';
 
 defineOptions({
@@ -14,11 +15,11 @@ defineOptions({
         breadcrumbs: [
             {
                 title: 'Kedudukan',
-                href: admin.rankings.teams().url,
+                href: debate.admin.rankings.teams().url,
             },
             {
                 title: 'Pasukan',
-                href: admin.rankings.teams().url,
+                href: debate.admin.rankings.teams().url,
             },
         ],
     },
@@ -53,7 +54,7 @@ onMounted(fetchRankings);
             <Heading title="Kedudukan Pasukan" description="Kedudukan keseluruhan kejohanan untuk semua pasukan." />
             <div class="flex gap-2">
                 <Button variant="outline" as-child>
-                    <Link :href="admin.rankings.speakers().url">Kedudukan Pendebat</Link>
+                    <Link :href="debate.admin.rankings.speakers().url">Kedudukan Pendebat</Link>
                 </Button>
             </div>
         </div>

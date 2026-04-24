@@ -123,15 +123,14 @@ class ScoreSheetService
             + (float) $payload['mark_p1']
             + (float) $payload['mark_penggulungan_opp'];
 
-        $calculatedMargin = round(abs($govTotal - $oppTotal), 1);
-        if ($calculatedMargin === 0.0) {
+        if (round(abs($govTotal - $oppTotal), 1) === 0.0) {
             throw new InvalidArgumentException('Team totals cannot be tied.');
         }
 
         return [
             'gov_total' => round($govTotal, 1),
             'opp_total' => round($oppTotal, 1),
-            'margin' => $calculatedMargin,
+            'margin' => round((float) $payload['margin'], 1),
             'winner_side' => $govTotal > $oppTotal
                 ? TeamSide::Government
                 : TeamSide::Opposition,

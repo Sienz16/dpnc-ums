@@ -64,7 +64,10 @@ class RankingService
                     return;
                 }
 
-                $govMargin = (float) $result->official_team_score_government - (float) $result->official_team_score_opposition;
+                $officialMargin = (float) $result->official_margin;
+                $govMargin = $result->winner_side === TeamSide::Government
+                    ? $officialMargin
+                    : -$officialMargin;
                 $oppMargin = -$govMargin;
 
                 if (array_key_exists($match->government_team_id, $rows)) {
@@ -90,10 +93,25 @@ class RankingService
 
                 return $row;
             })
-            ->sortByDesc('average_team_score')
-            ->sortByDesc('average_margin')
-            ->sortByDesc('judge_count')
-            ->sortByDesc('win_count')
+            ->sort(function (array $left, array $right): int {
+                if ($left['win_count'] !== $right['win_count']) {
+                    return $right['win_count'] <=> $left['win_count'];
+                }
+
+                if ($left['judge_count'] !== $right['judge_count']) {
+                    return $right['judge_count'] <=> $left['judge_count'];
+                }
+
+                if ($left['average_margin'] !== $right['average_margin']) {
+                    return $right['average_margin'] <=> $left['average_margin'];
+                }
+
+                if ($left['average_team_score'] !== $right['average_team_score']) {
+                    return $right['average_team_score'] <=> $left['average_team_score'];
+                }
+
+                return $left['team_name'] <=> $right['team_name'];
+            })
             ->values();
     }
 
