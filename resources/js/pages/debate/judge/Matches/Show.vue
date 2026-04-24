@@ -199,8 +199,8 @@ const allMembers = computed(() => {
     }
 
     return [
-        ...(matchData.value.government_team?.members ?? []),
-        ...(matchData.value.opposition_team?.members ?? []),
+        ...(matchData.value.government_lineup ?? matchData.value.government_team?.members ?? []),
+        ...(matchData.value.opposition_lineup ?? matchData.value.opposition_team?.members ?? []),
     ];
 });
 
@@ -208,8 +208,8 @@ const eligibleBestDebaters = computed(() => {
     return scoredMembers(allMembers.value);
 });
 
-const governmentLineup = computed(() => sortMembersBySpeakerPosition(matchData.value?.government_team?.members));
-const oppositionLineup = computed(() => sortMembersBySpeakerPosition(matchData.value?.opposition_team?.members));
+const governmentLineup = computed(() => sortMembersBySpeakerPosition(matchData.value?.government_lineup ?? matchData.value?.government_team?.members));
+const oppositionLineup = computed(() => sortMembersBySpeakerPosition(matchData.value?.opposition_lineup ?? matchData.value?.opposition_team?.members));
 
 const isLocked = computed(() => {
     return matchData.value?.status === 'completed' || scoreSheet.value?.state === 'submitted';

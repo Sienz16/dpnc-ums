@@ -73,6 +73,11 @@ class DebateMatch extends Model
         return $this->hasMany(ScoreSheet::class, 'match_id');
     }
 
+    public function matchSpeakers(): HasMany
+    {
+        return $this->hasMany(MatchSpeaker::class, 'match_id');
+    }
+
     public function result(): HasOne
     {
         return $this->hasOne(MatchResult::class, 'match_id');

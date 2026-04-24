@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Domain\Debate\Enums\SpeakerPosition;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateTeamMemberRequest extends FormRequest
 {
@@ -28,6 +29,31 @@ class UpdateTeamMemberRequest extends FormRequest
                     ->ignore($member),
             ],
             'is_active' => ['sometimes', 'boolean'],
+        ];
+    }
+
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $team = $this->route('team');
+                $member = $this->route('member');
+
+                if (! $this->has('speaker_position')) {
+                    return;
+                }
+
+                if ($this->input('speaker_position') === $member->speaker_position->value) {
+                    return;
+                }
+
+                if ($team->roster_locked) {
+                    $validator->errors()->add(
+                        'speaker_position',
+                        'Posisi pendebat tidak boleh diubah selepas pasukan memulakan perlawanan. Buka ciri lineup per perlawanan jika anda perlukan pertukaran semasa kejohanan.',
+                    );
+                }
+            },
         ];
     }
 }

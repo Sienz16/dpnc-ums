@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Debate\Services\MatchLineupService;
 use App\Domain\Debate\Services\RankingService;
 use App\Http\Controllers\Controller;
 use App\Models\DebateMatch;
@@ -9,22 +10,24 @@ use Illuminate\Http\JsonResponse;
 
 class ReportController extends Controller
 {
-    public function __construct(private RankingService $rankingService)
-    {
-    }
+    public function __construct(
+        private RankingService $rankingService,
+        private MatchLineupService $matchLineupService,
+    ) {}
 
     public function match(DebateMatch $match): JsonResponse
     {
         return response()->json([
-            'data' => $match->load([
+            'data' => $this->matchLineupService->decorateMatch($match->load([
                 'round',
                 'room',
                 'governmentTeam.members',
                 'oppositionTeam.members',
+                'matchSpeakers.teamMember',
                 'judgeAssignments.judge',
                 'scoreSheets.bestDebater',
                 'result.bestSpeaker',
-            ]),
+            ])),
         ]);
     }
 

@@ -1,10 +1,13 @@
 <?php
 
 use App\Domain\Debate\Enums\MatchStatus;
+use App\Domain\Debate\Enums\SpeakerPosition;
 use App\Models\DebateMatch;
+use App\Models\MatchSpeaker;
 use App\Models\Room;
 use App\Models\Round;
 use App\Models\Team;
+use App\Models\TeamMember;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -184,4 +187,69 @@ test('cannot update match with room already assigned in the same round', functio
             'room_id' => $roomA->id,
         ])
         ->assertInvalid(['room_id']);
+});
+
+test('can create match with a match specific lineup override', function () {
+    $superadmin = User::factory()->superadmin()->create();
+
+    $round = Round::factory()->create();
+    $room = Room::factory()->create();
+
+    $governmentTeam = Team::factory()->create();
+    $oppositionTeam = Team::factory()->create();
+
+    $govMembers = collect([
+        SpeakerPosition::SpeakerOne,
+        SpeakerPosition::SpeakerTwo,
+        SpeakerPosition::SpeakerThree,
+        SpeakerPosition::SpeakerFour,
+    ])->map(fn (SpeakerPosition $position) => TeamMember::factory()->create([
+        'team_id' => $governmentTeam->id,
+        'speaker_position' => $position,
+    ]));
+
+    $oppMembers = collect([
+        SpeakerPosition::SpeakerOne,
+        SpeakerPosition::SpeakerTwo,
+        SpeakerPosition::SpeakerThree,
+        SpeakerPosition::SpeakerFour,
+    ])->map(fn (SpeakerPosition $position) => TeamMember::factory()->create([
+        'team_id' => $oppositionTeam->id,
+        'speaker_position' => $position,
+    ]));
+
+    $response = $this->actingAs($superadmin)
+        ->postJson('/admin/matches', [
+            'round_id' => $round->id,
+            'room_id' => $room->id,
+            'government_team_id' => $governmentTeam->id,
+            'opposition_team_id' => $oppositionTeam->id,
+            'judge_panel_size' => 3,
+            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'government' => [
+                'speaker_1' => $govMembers[3]->id,
+                'speaker_2' => $govMembers[1]->id,
+                'speaker_3' => $govMembers[2]->id,
+                'speaker_4' => $govMembers[0]->id,
+            ],
+            'opposition' => [
+                'speaker_1' => $oppMembers[0]->id,
+                'speaker_2' => $oppMembers[1]->id,
+                'speaker_3' => $oppMembers[2]->id,
+                'speaker_4' => $oppMembers[3]->id,
+            ],
+        ]);
+
+    $response->assertCreated();
+
+    $matchId = $response->json('data.id');
+
+    $this->assertDatabaseHas('match_speakers', [
+        'match_id' => $matchId,
+        'team_id' => $governmentTeam->id,
+        'team_member_id' => $govMembers[3]->id,
+        'speaker_position' => SpeakerPosition::SpeakerOne->value,
+    ]);
+
+    expect(MatchSpeaker::query()->where('match_id', $matchId)->count())->toBe(8);
 });

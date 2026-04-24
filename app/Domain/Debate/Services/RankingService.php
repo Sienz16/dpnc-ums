@@ -13,6 +13,8 @@ use Illuminate\Support\Collection;
 
 class RankingService
 {
+    public function __construct(private MatchLineupService $matchLineupService) {}
+
     /**
      * @return Collection<int, array<string, mixed>>
      */
@@ -157,7 +159,7 @@ class RankingService
         $scoresByMember = [];
 
         DebateMatch::query()
-            ->with(['governmentTeam.members', 'oppositionTeam.members'])
+            ->with(['governmentTeam.members', 'oppositionTeam.members', 'matchSpeakers.teamMember'])
             ->get()
             ->each(function (DebateMatch $match) use (&$scoresByMember): void {
                 $submittedSheets = ScoreSheet::query()
@@ -169,14 +171,10 @@ class RankingService
                     return;
                 }
 
-                $members = $match->governmentTeam->members->concat($match->oppositionTeam->members);
+                $members = $this->matchLineupService->scoredMembers($match);
 
                 $members->each(function (TeamMember $member) use (&$scoresByMember, $submittedSheets, $match): void {
-                    $side = $member->team_id === $match->government_team_id
-                        ? TeamSide::Government
-                        : TeamSide::Opposition;
-
-                    $scoreField = $member->speaker_position->scoreField($side);
+                    $scoreField = $this->matchLineupService->scoreFieldForMember($match, $member);
 
                     if ($scoreField === null) {
                         return;

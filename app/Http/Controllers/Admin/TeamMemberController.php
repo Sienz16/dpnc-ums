@@ -13,6 +13,8 @@ class TeamMemberController extends Controller
 {
     public function store(StoreTeamMemberRequest $request, Team $team): JsonResponse
     {
+        abort_if($team->roster_locked, 422, 'Rosters are locked once the team has started a match.');
+
         $member = $team->members()->create($request->validated());
 
         return response()->json(['data' => $member], 201);
@@ -30,6 +32,7 @@ class TeamMemberController extends Controller
     public function destroy(Team $team, TeamMember $member): JsonResponse
     {
         abort_if($member->team_id !== $team->id, 404);
+        abort_if($team->roster_locked, 422, 'Rosters are locked once the team has started a match.');
 
         $member->delete();
 

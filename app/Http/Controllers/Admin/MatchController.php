@@ -3,15 +3,19 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Domain\Debate\Enums\MatchStatus;
+use App\Domain\Debate\Services\MatchLineupService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreMatchRequest;
 use App\Http\Requests\Admin\UpdateMatchRequest;
 use App\Models\DebateMatch;
 use App\Models\JudgeAssignment;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class MatchController extends Controller
 {
+    public function __construct(private MatchLineupService $matchLineupService) {}
+
     public function index(): JsonResponse
     {
         $matches = DebateMatch::query()
@@ -25,12 +29,44 @@ class MatchController extends Controller
 
     public function store(StoreMatchRequest $request): JsonResponse
     {
-        $match = DebateMatch::query()->create(array_merge(
-            $request->validated(),
-            ['status' => MatchStatus::Pending],
-        ));
+        $match = DB::transaction(function () use ($request): DebateMatch {
+            $payload = collect($request->validated());
+            $lineupPayload = $payload->only(['government', 'opposition'])->all();
 
-        return response()->json(['data' => $match->fresh()], 201);
+            $match = DebateMatch::query()->create(array_merge(
+                $payload->except(['government', 'opposition'])->all(),
+                ['status' => MatchStatus::Pending],
+            ));
+
+            $lineupWasProvided = collect($lineupPayload)
+                ->flatten()
+                ->filter(fn (mixed $value): bool => $value !== null)
+                ->isNotEmpty();
+
+            if ($lineupWasProvided) {
+                $match = $this->matchLineupService->sync(
+                    $match->loadMissing([
+                        'governmentTeam.members',
+                        'oppositionTeam.members',
+                        'matchSpeakers.teamMember',
+                    ]),
+                    $lineupPayload,
+                    $request->user(),
+                );
+            }
+
+            return $match;
+        });
+
+        return response()->json([
+            'data' => $this->matchLineupService->decorateMatch($match->fresh()->load([
+                'round',
+                'room',
+                'governmentTeam.members',
+                'oppositionTeam.members',
+                'matchSpeakers.teamMember',
+            ])),
+        ], 201);
     }
 
     public function show(DebateMatch $match): JsonResponse
@@ -50,14 +86,16 @@ class MatchController extends Controller
             'room',
             'governmentTeam.members',
             'oppositionTeam.members',
+            'matchSpeakers.teamMember',
             'judgeAssignments.judge',
+            'scoreSheets.judge',
             'scoreSheets.bestDebater',
             'result.bestSpeaker',
         ]);
         $matchData->setAttribute('unavailable_judge_ids', $unavailableJudgeIds);
 
         return response()->json([
-            'data' => $matchData,
+            'data' => $this->matchLineupService->decorateMatch($matchData),
         ]);
     }
 

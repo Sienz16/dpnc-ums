@@ -11,12 +11,15 @@ use Illuminate\Support\Collection;
 
 class MatchResultCalculator
 {
+    public function __construct(private MatchLineupService $matchLineupService) {}
+
     public function recalculate(DebateMatch $match, bool $isForceCompleted, bool $isProvisional): ?MatchResult
     {
         $match->loadMissing([
             'scoreSheets' => fn ($query) => $query->where('state', 'submitted'),
             'governmentTeam.members',
             'oppositionTeam.members',
+            'matchSpeakers.teamMember',
         ]);
 
         $submittedSheets = $match->scoreSheets;
@@ -107,7 +110,7 @@ class MatchResultCalculator
             ? TeamSide::Government
             : TeamSide::Opposition;
 
-        $scoreField = $member->speaker_position->scoreField($side);
+        $scoreField = $this->matchLineupService->scoreFieldForMember($match, $member);
 
         if ($scoreField === null) {
             return 0.0;

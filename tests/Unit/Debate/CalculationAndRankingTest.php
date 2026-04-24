@@ -7,6 +7,7 @@ use App\Domain\Debate\Services\MatchResultCalculator;
 use App\Domain\Debate\Services\RankingService;
 use App\Models\DebateMatch;
 use App\Models\MatchResult;
+use App\Models\MatchSpeaker;
 use App\Models\Room;
 use App\Models\Round;
 use App\Models\ScoreSheet;
@@ -294,4 +295,76 @@ test('team ranking breaks ties by judge count then official margin then score', 
     expect($rankings[0]['judge_count'])->toBe(3);
     expect((float) $rankings[0]['average_margin'])->toBe(5.0);
     expect((float) $rankings[1]['average_margin'])->toBe(0.5);
+});
+
+test('speaker ranking uses match specific lineup overrides', function () {
+    $governmentTeam = Team::factory()->create(['name' => 'Gov']);
+    $oppositionTeam = Team::factory()->create(['name' => 'Opp']);
+
+    $govSpeakerOne = TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerOne, 'full_name' => 'Gov One']);
+    TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerTwo]);
+    TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerThree]);
+    $govReserve = TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerFour, 'full_name' => 'Gov Reserve']);
+
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerOne]);
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerTwo]);
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerThree]);
+
+    $match = DebateMatch::factory()->create([
+        'round_id' => Round::factory()->create()->id,
+        'room_id' => Room::factory()->create()->id,
+        'government_team_id' => $governmentTeam->id,
+        'opposition_team_id' => $oppositionTeam->id,
+        'judge_panel_size' => 1,
+    ]);
+
+    MatchSpeaker::query()->insert([
+        [
+            'match_id' => $match->id,
+            'team_id' => $governmentTeam->id,
+            'team_member_id' => $govReserve->id,
+            'speaker_position' => SpeakerPosition::SpeakerOne->value,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'match_id' => $match->id,
+            'team_id' => $governmentTeam->id,
+            'team_member_id' => $govSpeakerOne->id,
+            'speaker_position' => SpeakerPosition::SpeakerFour->value,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $judge = User::factory()->judge()->create();
+
+    ScoreSheet::query()->create([
+        'match_id' => $match->id,
+        'judge_id' => $judge->id,
+        'mark_pm' => 83,
+        'mark_tpm' => 74,
+        'mark_m1' => 73,
+        'mark_kp' => 71,
+        'mark_tkp' => 70,
+        'mark_p1' => 69,
+        'mark_penggulungan_gov' => 36,
+        'mark_penggulungan_opp' => 34,
+        'gov_total' => 266,
+        'opp_total' => 244,
+        'margin' => 3,
+        'winner_side' => TeamSide::Government,
+        'best_debater_member_id' => $govReserve->id,
+        'state' => ScoreSheetState::Submitted,
+        'submitted_at' => now(),
+    ]);
+
+    $rankings = app(RankingService::class)->speakerRankings();
+
+    $reserveRow = $rankings->firstWhere('speaker_id', $govReserve->id);
+    $speakerOneRow = $rankings->firstWhere('speaker_id', $govSpeakerOne->id);
+
+    expect($reserveRow)->not->toBeNull();
+    expect($reserveRow['average_official_points_per_appearance'])->toBe(83.0);
+    expect($speakerOneRow)->toBeNull();
 });

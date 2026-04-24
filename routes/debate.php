@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminScoreSheetController;
 use App\Http\Controllers\Admin\JudgeController;
 use App\Http\Controllers\Admin\MatchAssignmentController;
 use App\Http\Controllers\Admin\MatchController;
 use App\Http\Controllers\Admin\MatchLifecycleController;
+use App\Http\Controllers\Admin\MatchLineupController;
 use App\Http\Controllers\Admin\RankingController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\RoomController;
@@ -40,6 +42,8 @@ Route::middleware(['auth', 'role:superadmin'])->prefix('admin')->name('admin.')-
 
     Route::post('matches/{match}/force-complete', [MatchLifecycleController::class, 'forceComplete'])->name('matches.force-complete');
     Route::post('matches/{match}/reopen', [MatchLifecycleController::class, 'reopen'])->name('matches.reopen');
+    Route::patch('matches/{match}/lineup', [MatchLineupController::class, 'update'])->name('matches.lineup.update');
+    Route::patch('matches/{match}/score-sheets/{judge}', [AdminScoreSheetController::class, 'update'])->name('matches.score-sheets.update');
 
     Route::get('rankings/teams', [RankingController::class, 'teams'])->name('rankings.teams');
     Route::get('rankings/speakers', [RankingController::class, 'speakers'])->name('rankings.speakers');

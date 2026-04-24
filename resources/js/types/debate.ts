@@ -32,6 +32,7 @@ export interface Team {
     name: string;
     institution: string | null;
     is_active: boolean;
+    roster_locked?: boolean;
     created_at: string;
     updated_at: string;
     members?: TeamMember[];
@@ -77,6 +78,9 @@ export interface Match {
     unavailable_judge_ids?: number[];
     result?: MatchResult;
     score_sheets?: ScoreSheet[];
+    government_lineup?: TeamMember[];
+    opposition_lineup?: TeamMember[];
+    can_edit_lineup?: boolean;
 }
 
 export type AssignedMode = 'manual' | 'random';

@@ -26,7 +26,21 @@ import {
 import { unwrapCollection } from '@/lib/httpPayload';
 import admin from '@/routes/admin';
 import debate from '@/routes/debate';
-import type { Match, Round, Room, Team } from '@/types/debate';
+import type { Match, Round, Room, Team, TeamMember } from '@/types/debate';
+
+type LineupSide = {
+    speaker_1: number | null;
+    speaker_2: number | null;
+    speaker_3: number | null;
+    speaker_4: number | null;
+};
+
+const emptyLineupSide = (): LineupSide => ({
+    speaker_1: null,
+    speaker_2: null,
+    speaker_3: null,
+    speaker_4: null,
+});
 
 defineOptions({
     layout: {
@@ -47,6 +61,8 @@ const mutationHttp = useHttp({
     opposition_team_id: null as number | null,
     judge_panel_size: 3 as number,
     scheduled_at: '',
+    government: emptyLineupSide(),
+    opposition: emptyLineupSide(),
 });
 const matches = ref<Match[]>([]);
 const rounds = ref<Round[]>([]);
@@ -128,8 +144,29 @@ const openCreateDialog = () => {
     mutationHttp.opposition_team_id = null;
     mutationHttp.judge_panel_size = 3;
     mutationHttp.scheduled_at = new Date().toISOString().slice(0, 16);
+    mutationHttp.government = emptyLineupSide();
+    mutationHttp.opposition = emptyLineupSide();
     isDialogOpen.value = true;
 };
+
+const teamById = (teamId: number | null): Team | undefined => {
+    return teams.value.find((team) => team.id === teamId);
+};
+
+const defaultLineupFromMembers = (members: TeamMember[] = []): LineupSide => {
+    return {
+        speaker_1: members.find((member) => member.speaker_position === 'speaker_1')?.id ?? null,
+        speaker_2: members.find((member) => member.speaker_position === 'speaker_2')?.id ?? null,
+        speaker_3: members.find((member) => member.speaker_position === 'speaker_3')?.id ?? null,
+        speaker_4: members.find((member) => member.speaker_position === 'speaker_4')?.id ?? null,
+    };
+};
+
+const selectedGovernmentTeam = computed(() => teamById(mutationHttp.government_team_id));
+const selectedOppositionTeam = computed(() => teamById(mutationHttp.opposition_team_id));
+
+const governmentRosterOptions = computed(() => selectedGovernmentTeam.value?.members ?? []);
+const oppositionRosterOptions = computed(() => selectedOppositionTeam.value?.members ?? []);
 
 const saveMatch = async () => {
     try {
@@ -177,6 +214,20 @@ watch(
         if (mutationHttp.opposition_team_id && assignedTeamIdsInSelectedRound.value.has(mutationHttp.opposition_team_id)) {
             mutationHttp.opposition_team_id = null;
         }
+    },
+);
+
+watch(
+    () => mutationHttp.government_team_id,
+    () => {
+        mutationHttp.government = defaultLineupFromMembers(selectedGovernmentTeam.value?.members);
+    },
+);
+
+watch(
+    () => mutationHttp.opposition_team_id,
+    () => {
+        mutationHttp.opposition = defaultLineupFromMembers(selectedOppositionTeam.value?.members);
     },
 );
 
@@ -335,6 +386,132 @@ const getStatusVariant = (status: string) => {
                                 </SelectItem>
                             </SelectContent>
                         </Select>
+                    </div>
+
+                    <div
+                        v-if="selectedGovernmentTeam && selectedOppositionTeam"
+                        class="grid gap-4 rounded-lg border border-dashed p-4"
+                    >
+                        <div>
+                            <h3 class="text-sm font-semibold">Lineup Perlawanan</h3>
+                            <p class="text-xs text-muted-foreground">
+                                Susun semula speaker untuk perlawanan ini jika perlu. Jika dibiarkan seperti asal, sistem akan guna susunan pasukan sedia ada.
+                            </p>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div class="grid gap-3">
+                                <Label class="text-xs font-bold uppercase tracking-wider text-primary">Kerajaan</Label>
+                                <div class="grid gap-2">
+                                    <Label for="government-speaker-1">Pendebat 1</Label>
+                                    <Select v-model="mutationHttp.government.speaker_1">
+                                        <SelectTrigger id="government-speaker-1">
+                                            <SelectValue placeholder="Pilih pendebat 1" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="government-speaker-2">Pendebat 2</Label>
+                                    <Select v-model="mutationHttp.government.speaker_2">
+                                        <SelectTrigger id="government-speaker-2">
+                                            <SelectValue placeholder="Pilih pendebat 2" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="government-speaker-3">Pendebat 3</Label>
+                                    <Select v-model="mutationHttp.government.speaker_3">
+                                        <SelectTrigger id="government-speaker-3">
+                                            <SelectValue placeholder="Pilih pendebat 3" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="government-speaker-4">Simpanan</Label>
+                                    <Select v-model="mutationHttp.government.speaker_4">
+                                        <SelectTrigger id="government-speaker-4">
+                                            <SelectValue placeholder="Pilih simpanan" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <div class="grid gap-3">
+                                <Label class="text-xs font-bold uppercase tracking-wider text-destructive">Pembangkang</Label>
+                                <div class="grid gap-2">
+                                    <Label for="opposition-speaker-1">Pendebat 1</Label>
+                                    <Select v-model="mutationHttp.opposition.speaker_1">
+                                        <SelectTrigger id="opposition-speaker-1">
+                                            <SelectValue placeholder="Pilih pendebat 1" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="opposition-speaker-2">Pendebat 2</Label>
+                                    <Select v-model="mutationHttp.opposition.speaker_2">
+                                        <SelectTrigger id="opposition-speaker-2">
+                                            <SelectValue placeholder="Pilih pendebat 2" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="opposition-speaker-3">Pendebat 3</Label>
+                                    <Select v-model="mutationHttp.opposition.speaker_3">
+                                        <SelectTrigger id="opposition-speaker-3">
+                                            <SelectValue placeholder="Pilih pendebat 3" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div class="grid gap-2">
+                                    <Label for="opposition-speaker-4">Simpanan</Label>
+                                    <Select v-model="mutationHttp.opposition.speaker_4">
+                                        <SelectTrigger id="opposition-speaker-4">
+                                            <SelectValue placeholder="Pilih simpanan" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
+                                                {{ member.full_name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">

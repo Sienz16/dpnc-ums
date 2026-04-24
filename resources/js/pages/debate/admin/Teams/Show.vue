@@ -86,6 +86,7 @@ const selectablePositions = computed(() => {
 });
 
 const canAddMember = computed(() => selectablePositions.value.length > 0);
+const canChangeRosterStructure = computed(() => !teamData.value?.roster_locked);
 
 const defaultAvailablePosition = (): SpeakerPosition => {
     return selectablePositions.value[0] ?? 'speaker_1';
@@ -194,12 +195,15 @@ const deleteMember = async (member: TeamMember) => {
                         <h2 class="text-lg font-semibold">Ahli Pasukan</h2>
                         <p class="text-sm text-muted-foreground">Tetapkan pendebat 1 hingga 4. Pendebat 4 sentiasa simpanan.</p>
                     </div>
-                    <Button size="sm" @click="openCreateMemberDialog" :disabled="!canAddMember">
+                    <Button size="sm" @click="openCreateMemberDialog" :disabled="!canAddMember || !canChangeRosterStructure">
                         <Plus class="w-4 h-4 mr-2" />
                         Tambah Ahli
                     </Button>
                 </div>
-                <p v-if="!canAddMember" class="text-sm text-muted-foreground">
+                <p v-if="teamData.roster_locked" class="text-sm text-amber-700">
+                    Struktur roster telah dikunci kerana pasukan ini sudah memulakan perlawanan. Anda masih boleh membetulkan nama ahli, tetapi slot pendebat dan tambah/buang ahli tidak lagi dibenarkan.
+                </p>
+                <p v-else-if="!canAddMember" class="text-sm text-muted-foreground">
                     Semua slot pendebat telah diisi. Gunakan sunting untuk ubah susunan.
                 </p>
                 <div class="relative w-full overflow-auto rounded-xl border bg-background">
@@ -223,7 +227,7 @@ const deleteMember = async (member: TeamMember) => {
                                             <Button variant="ghost" size="icon" @click="openEditMemberDialog(member)">
                                                 <Edit2 class="w-4 h-4" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" @click="deleteMember(member)">
+                                            <Button variant="ghost" size="icon" @click="deleteMember(member)" :disabled="teamData.roster_locked">
                                                 <Trash2 class="w-4 h-4 text-destructive" />
                                             </Button>
                                         </div>
@@ -251,7 +255,7 @@ const deleteMember = async (member: TeamMember) => {
                     </div>
                     <div class="grid gap-2">
                         <Label for="position">Slot Pendebat</Label>
-                        <Select v-model="memberHttp.speaker_position">
+                        <Select v-model="memberHttp.speaker_position" :disabled="teamData.roster_locked && !!editingMember">
                             <SelectTrigger id="position">
                                 <SelectValue placeholder="Pilih slot pendebat" />
                             </SelectTrigger>
@@ -263,6 +267,9 @@ const deleteMember = async (member: TeamMember) => {
                         </Select>
                         <p class="text-xs text-muted-foreground">
                             Pendebat 1-3 akan bermain. Pendebat 4 ialah simpanan dan tidak dinilai dalam borang markah.
+                        </p>
+                        <p v-if="teamData.roster_locked && editingMember" class="text-xs text-amber-700">
+                            Slot pendebat telah dikunci kerana pasukan ini sudah mempunyai perlawanan yang bermula atau selesai.
                         </p>
                     </div>
                 </div>

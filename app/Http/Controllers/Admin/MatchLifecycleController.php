@@ -12,9 +12,7 @@ use InvalidArgumentException;
 
 class MatchLifecycleController extends Controller
 {
-    public function __construct(private MatchLifecycleService $lifecycleService)
-    {
-    }
+    public function __construct(private MatchLifecycleService $lifecycleService) {}
 
     public function forceComplete(ForceCompleteMatchRequest $request, DebateMatch $match): JsonResponse
     {
@@ -23,6 +21,7 @@ class MatchLifecycleController extends Controller
                 $match,
                 $request->user(),
                 $request->validated('reason'),
+                $request->validated('score_sheets') ?? [],
             );
         } catch (InvalidArgumentException $exception) {
             abort(422, $exception->getMessage());

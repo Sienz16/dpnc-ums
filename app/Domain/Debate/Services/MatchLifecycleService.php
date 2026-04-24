@@ -15,9 +15,9 @@ class MatchLifecycleService
     public function __construct(
         private MatchStatusService $matchStatusService,
         private MatchResultCalculator $resultCalculator,
+        private ScoreSheetService $scoreSheetService,
         private AuditLogService $auditLogService,
-    ) {
-    }
+    ) {}
 
     public function checkIn(DebateMatch $match, User $judge): DebateMatch
     {
@@ -40,14 +40,45 @@ class MatchLifecycleService
         });
     }
 
-    public function forceComplete(DebateMatch $match, User $actor, string $reason): DebateMatch
+    /**
+     * @param  array<int, array<string, mixed>>  $scoreSheets
+     */
+    public function forceComplete(DebateMatch $match, User $actor, string $reason, array $scoreSheets = []): DebateMatch
     {
-        return DB::transaction(function () use ($match, $actor, $reason): DebateMatch {
+        return DB::transaction(function () use ($match, $actor, $reason, $scoreSheets): DebateMatch {
             if ($match->status === MatchStatus::Completed) {
                 throw new InvalidArgumentException('Match is already completed.');
             }
 
-            $missingSubmissionExists = $match->judgeAssignments()
+            $missingAssignments = $match->judgeAssignments()
+                ->whereNull('submitted_at')
+                ->get();
+
+            if ($missingAssignments->isNotEmpty()) {
+                $payloadsByJudgeId = collect($scoreSheets)->keyBy(fn (array $payload): int => (int) $payload['judge_id']);
+
+                foreach ($missingAssignments as $assignment) {
+                    $payload = $payloadsByJudgeId->get($assignment->judge_id);
+
+                    if (! is_array($payload)) {
+                        throw new InvalidArgumentException('Force-complete requires scores for every missing judge.');
+                    }
+
+                    $judge = User::query()->findOrFail($assignment->judge_id);
+
+                    $this->scoreSheetService->submitAsAdmin(
+                        $match->fresh()->loadMissing(['governmentTeam.members', 'oppositionTeam.members']),
+                        $judge,
+                        $actor,
+                        collect($payload)->except('judge_id')->all(),
+                        $reason,
+                        'admin_submitted_on_behalf',
+                    );
+                }
+            }
+
+            $refreshedMatch = $match->fresh();
+            $missingSubmissionExists = $refreshedMatch->judgeAssignments()
                 ->whereNull('submitted_at')
                 ->exists();
 
@@ -56,7 +87,7 @@ class MatchLifecycleService
                 : MatchResultState::Final;
 
             $result = $this->resultCalculator->recalculate(
-                $match->fresh(),
+                $refreshedMatch,
                 isForceCompleted: true,
                 isProvisional: $resultState === MatchResultState::Provisional,
             );
@@ -65,7 +96,7 @@ class MatchLifecycleService
                 throw new InvalidArgumentException('Force-complete requires at least one submitted score sheet.');
             }
 
-            $match->update([
+            $refreshedMatch->update([
                 'status' => MatchStatus::Completed,
                 'completion_type' => MatchCompletionType::ForceCompleted,
                 'result_state' => $resultState,
@@ -74,15 +105,20 @@ class MatchLifecycleService
             $this->auditLogService->log(
                 actor: $actor,
                 entityType: 'match',
-                entityId: $match->id,
+                entityId: $refreshedMatch->id,
                 action: 'force_completed',
                 reason: $reason,
                 metadata: [
                     'missing_submission_exists' => $missingSubmissionExists,
+                    'admin_entered_score_sheet_judge_ids' => collect($scoreSheets)
+                        ->pluck('judge_id')
+                        ->map(fn (mixed $judgeId): int => (int) $judgeId)
+                        ->values()
+                        ->all(),
                 ],
             );
 
-            return $match->fresh();
+            return $refreshedMatch->fresh();
         });
     }
 
