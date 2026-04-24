@@ -112,10 +112,6 @@ class MatchController extends Controller
 
     public function destroy(DebateMatch $match): JsonResponse
     {
-        if ($match->status !== MatchStatus::Pending) {
-            abort(422, 'Only pending matches can be deleted.');
-        }
-
         $match->delete();
 
         return response()->json(status: 204);

@@ -3,9 +3,12 @@
 use App\Domain\Debate\Enums\MatchStatus;
 use App\Domain\Debate\Enums\SpeakerPosition;
 use App\Models\DebateMatch;
+use App\Models\JudgeAssignment;
+use App\Models\MatchResult;
 use App\Models\MatchSpeaker;
 use App\Models\Room;
 use App\Models\Round;
+use App\Models\ScoreSheet;
 use App\Models\Team;
 use App\Models\TeamMember;
 use App\Models\User;
@@ -13,7 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-test('superadmin can delete pending match', function () {
+test('superadmin can delete match', function () {
     $superadmin = User::factory()->superadmin()->create();
 
     $match = DebateMatch::factory()->create([
@@ -24,21 +27,56 @@ test('superadmin can delete pending match', function () {
         ->deleteJson("/admin/matches/{$match->id}")
         ->assertNoContent();
 
-    $this->assertDatabaseMissing('matches', [
-        'id' => $match->id,
-    ]);
+    $this->assertModelMissing($match);
 });
 
-test('superadmin cannot delete non pending match', function () {
+test('superadmin can delete completed match with judging records', function () {
     $superadmin = User::factory()->superadmin()->create();
+    $judge = User::factory()->judge()->create();
+    $governmentTeam = Team::factory()->create();
+    $oppositionTeam = Team::factory()->create();
+    $bestSpeaker = TeamMember::factory()->create([
+        'team_id' => $governmentTeam->id,
+        'speaker_position' => SpeakerPosition::SpeakerOne,
+    ]);
 
     $match = DebateMatch::factory()->create([
         'status' => MatchStatus::Completed,
+        'government_team_id' => $governmentTeam->id,
+        'opposition_team_id' => $oppositionTeam->id,
+    ]);
+
+    $assignment = JudgeAssignment::factory()->create([
+        'match_id' => $match->id,
+        'judge_id' => $judge->id,
+        'checked_in_at' => now(),
+        'submitted_at' => now(),
+    ]);
+    $scoreSheet = ScoreSheet::factory()->create([
+        'match_id' => $match->id,
+        'judge_id' => $judge->id,
+        'best_debater_member_id' => $bestSpeaker->id,
+    ]);
+    $result = MatchResult::factory()->create([
+        'match_id' => $match->id,
+        'best_speaker_member_id' => $bestSpeaker->id,
+    ]);
+    $matchSpeaker = MatchSpeaker::query()->create([
+        'match_id' => $match->id,
+        'team_id' => $governmentTeam->id,
+        'team_member_id' => $bestSpeaker->id,
+        'speaker_position' => SpeakerPosition::SpeakerOne,
     ]);
 
     $this->actingAs($superadmin)
         ->deleteJson("/admin/matches/{$match->id}")
-        ->assertUnprocessable();
+        ->assertNoContent();
+
+    $this->assertModelMissing($match);
+    $this->assertModelMissing($assignment);
+    $this->assertModelMissing($scoreSheet);
+    $this->assertModelMissing($result);
+    $this->assertModelMissing($matchSpeaker);
 });
 
 test('cannot create match with team already assigned in the same round', function () {

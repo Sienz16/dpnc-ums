@@ -34,6 +34,8 @@ type LineupSide = {
     speaker_3: number | null;
     speaker_4: number | null;
 };
+type LineupPosition = keyof LineupSide;
+type LineupSideKey = 'government' | 'opposition';
 
 const emptyLineupSide = (): LineupSide => ({
     speaker_1: null,
@@ -167,6 +169,36 @@ const selectedOppositionTeam = computed(() => teamById(mutationHttp.opposition_t
 
 const governmentRosterOptions = computed(() => selectedGovernmentTeam.value?.members ?? []);
 const oppositionRosterOptions = computed(() => selectedOppositionTeam.value?.members ?? []);
+const lineupPositions: LineupPosition[] = ['speaker_1', 'speaker_2', 'speaker_3', 'speaker_4'];
+let syncingLineupSwap = false;
+
+const syncLineupSwap = (
+    sideKey: LineupSideKey,
+    position: LineupPosition,
+    newValue: number | null,
+    oldValue: number | null,
+) => {
+    if (syncingLineupSwap) {
+        return;
+    }
+
+    if (!newValue || newValue === oldValue) {
+        return;
+    }
+
+    const side = mutationHttp[sideKey];
+    const duplicatePosition = lineupPositions.find((candidate) => {
+        return candidate !== position && side[candidate] === newValue;
+    });
+
+    if (!duplicatePosition) {
+        return;
+    }
+
+    syncingLineupSwap = true;
+    side[duplicatePosition] = oldValue;
+    syncingLineupSwap = false;
+};
 
 const saveMatch = async () => {
     try {
@@ -230,6 +262,22 @@ watch(
         mutationHttp.opposition = defaultLineupFromMembers(selectedOppositionTeam.value?.members);
     },
 );
+
+for (const position of lineupPositions) {
+    watch(
+        () => mutationHttp.government[position],
+        (newValue, oldValue) => {
+            syncLineupSwap('government', position, newValue, oldValue);
+        },
+    );
+
+    watch(
+        () => mutationHttp.opposition[position],
+        (newValue, oldValue) => {
+            syncLineupSwap('opposition', position, newValue, oldValue);
+        },
+    );
+}
 
 const getStatusVariant = (status: string) => {
     switch (status) {
@@ -306,7 +354,6 @@ const getStatusVariant = (status: string) => {
                                             </Link>
                                         </Button>
                                         <Button
-                                            v-if="match.status === 'pending'"
                                             variant="destructive"
                                             size="sm"
                                             @click="deleteMatch(match)"
@@ -330,40 +377,38 @@ const getStatusVariant = (status: string) => {
                     </DialogDescription>
                 </DialogHeader>
 
-                <div class="grid gap-4 py-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="grid gap-2">
-                            <Label>Pusingan</Label>
-                            <Select v-model="mutationHttp.round_id">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih pusingan" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem v-for="round in rounds" :key="round.id" :value="round.id">
-                                        {{ round.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div class="grid gap-2">
-                            <Label>Bilik</Label>
-                            <Select v-model="mutationHttp.room_id">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih bilik" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem v-for="room in availableRooms" :key="room.id" :value="room.id">
-                                        {{ room.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                <div class="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2">
+                    <div class="grid gap-2">
+                        <Label>Pusingan</Label>
+                        <Select v-model="mutationHttp.round_id">
+                            <SelectTrigger class="w-full">
+                                <SelectValue placeholder="Pilih pusingan" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem v-for="round in rounds" :key="round.id" :value="round.id">
+                                    {{ round.name }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div class="grid gap-2">
+                        <Label>Bilik</Label>
+                        <Select v-model="mutationHttp.room_id">
+                            <SelectTrigger class="w-full">
+                                <SelectValue placeholder="Pilih bilik" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem v-for="room in availableRooms" :key="room.id" :value="room.id">
+                                    {{ room.name }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div class="grid gap-2">
                         <Label>Pasukan Kerajaan</Label>
                         <Select v-model="mutationHttp.government_team_id">
-                            <SelectTrigger>
+                            <SelectTrigger class="w-full">
                                 <SelectValue placeholder="Pilih pasukan kerajaan" />
                             </SelectTrigger>
                             <SelectContent>
@@ -377,7 +422,7 @@ const getStatusVariant = (status: string) => {
                     <div class="grid gap-2">
                         <Label>Pasukan Pembangkang</Label>
                         <Select v-model="mutationHttp.opposition_team_id">
-                            <SelectTrigger>
+                            <SelectTrigger class="w-full">
                                 <SelectValue placeholder="Pilih pasukan pembangkang" />
                             </SelectTrigger>
                             <SelectContent>
@@ -390,7 +435,7 @@ const getStatusVariant = (status: string) => {
 
                     <div
                         v-if="selectedGovernmentTeam && selectedOppositionTeam"
-                        class="grid gap-4 rounded-lg border border-dashed p-4"
+                        class="grid gap-4 rounded-lg border border-dashed p-4 sm:col-span-2"
                     >
                         <div>
                             <h3 class="text-sm font-semibold">Lineup Perlawanan</h3>
@@ -400,112 +445,112 @@ const getStatusVariant = (status: string) => {
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-2">
-                            <div class="grid gap-3">
+                            <div class="grid min-w-0 gap-3">
                                 <Label class="text-xs font-bold uppercase tracking-wider text-primary">Kerajaan</Label>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="government-speaker-1">Pendebat 1</Label>
                                     <Select v-model="mutationHttp.government.speaker_1">
-                                        <SelectTrigger id="government-speaker-1">
-                                            <SelectValue placeholder="Pilih pendebat 1" />
+                                        <SelectTrigger id="government-speaker-1" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih pendebat 1" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="government-speaker-2">Pendebat 2</Label>
                                     <Select v-model="mutationHttp.government.speaker_2">
-                                        <SelectTrigger id="government-speaker-2">
-                                            <SelectValue placeholder="Pilih pendebat 2" />
+                                        <SelectTrigger id="government-speaker-2" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih pendebat 2" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="government-speaker-3">Pendebat 3</Label>
                                     <Select v-model="mutationHttp.government.speaker_3">
-                                        <SelectTrigger id="government-speaker-3">
-                                            <SelectValue placeholder="Pilih pendebat 3" />
+                                        <SelectTrigger id="government-speaker-3" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih pendebat 3" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="government-speaker-4">Simpanan</Label>
                                     <Select v-model="mutationHttp.government.speaker_4">
-                                        <SelectTrigger id="government-speaker-4">
-                                            <SelectValue placeholder="Pilih simpanan" />
+                                        <SelectTrigger id="government-speaker-4" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih simpanan" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in governmentRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
                             </div>
 
-                            <div class="grid gap-3">
+                            <div class="grid min-w-0 gap-3">
                                 <Label class="text-xs font-bold uppercase tracking-wider text-destructive">Pembangkang</Label>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="opposition-speaker-1">Pendebat 1</Label>
                                     <Select v-model="mutationHttp.opposition.speaker_1">
-                                        <SelectTrigger id="opposition-speaker-1">
-                                            <SelectValue placeholder="Pilih pendebat 1" />
+                                        <SelectTrigger id="opposition-speaker-1" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih pendebat 1" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="opposition-speaker-2">Pendebat 2</Label>
                                     <Select v-model="mutationHttp.opposition.speaker_2">
-                                        <SelectTrigger id="opposition-speaker-2">
-                                            <SelectValue placeholder="Pilih pendebat 2" />
+                                        <SelectTrigger id="opposition-speaker-2" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih pendebat 2" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="opposition-speaker-3">Pendebat 3</Label>
                                     <Select v-model="mutationHttp.opposition.speaker_3">
-                                        <SelectTrigger id="opposition-speaker-3">
-                                            <SelectValue placeholder="Pilih pendebat 3" />
+                                        <SelectTrigger id="opposition-speaker-3" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih pendebat 3" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div class="grid gap-2">
+                                <div class="grid min-w-0 gap-2">
                                     <Label for="opposition-speaker-4">Simpanan</Label>
                                     <Select v-model="mutationHttp.opposition.speaker_4">
-                                        <SelectTrigger id="opposition-speaker-4">
-                                            <SelectValue placeholder="Pilih simpanan" />
+                                        <SelectTrigger id="opposition-speaker-4" class="w-full max-w-full min-w-0">
+                                            <SelectValue placeholder="Pilih simpanan" class="truncate" />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent class="max-w-[var(--reka-select-trigger-width)]">
                                             <SelectItem v-for="member in oppositionRosterOptions" :key="member.id" :value="member.id">
-                                                {{ member.full_name }}
+                                                <span class="block w-full truncate">{{ member.full_name }}</span>
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>
@@ -514,25 +559,23 @@ const getStatusVariant = (status: string) => {
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="grid gap-2">
-                            <Label>Saiz Panel</Label>
-                            <Select v-model="mutationHttp.judge_panel_size">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih saiz" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem :value="1">1 Hakim</SelectItem>
-                                    <SelectItem :value="3">3 Hakim</SelectItem>
-                                    <SelectItem :value="5">5 Hakim</SelectItem>
-                                    <SelectItem :value="7">7 Hakim</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div class="grid gap-2">
-                            <Label>Masa Dijadualkan</Label>
-                            <Input v-model="mutationHttp.scheduled_at" type="datetime-local" />
-                        </div>
+                    <div class="grid gap-2">
+                        <Label>Saiz Panel</Label>
+                        <Select v-model="mutationHttp.judge_panel_size">
+                            <SelectTrigger class="w-full">
+                                <SelectValue placeholder="Pilih saiz" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="1">1 Hakim</SelectItem>
+                                <SelectItem :value="3">3 Hakim</SelectItem>
+                                <SelectItem :value="5">5 Hakim</SelectItem>
+                                <SelectItem :value="7">7 Hakim</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div class="grid gap-2">
+                        <Label>Masa Dijadualkan</Label>
+                        <Input v-model="mutationHttp.scheduled_at" type="datetime-local" />
                     </div>
                 </div>
 

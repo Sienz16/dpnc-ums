@@ -15,7 +15,7 @@ import {
     Check,
     PencilLine,
 } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -59,6 +59,9 @@ interface ScoreFieldMeta {
     max: number;
     recommendedRange: string;
 }
+
+type LineupPosition = 'speaker_1' | 'speaker_2' | 'speaker_3' | 'speaker_4';
+type LineupSideKey = 'government' | 'opposition';
 
 const governmentScoreFields: ScoreFieldMeta[] = [
     { key: 'mark_pm', label: 'Perdana Menteri', max: 100, recommendedRange: '75-85' },
@@ -105,6 +108,7 @@ const isScoreSheetDialogOpen = ref(false);
 const operationReason = ref('');
 const selectedJudges = ref<number[]>([]);
 const activeScoreSheetJudgeId = ref<number | null>(null);
+const isEditingLineup = ref(false);
 const lineupForm = useHttp({
     government: {
         speaker_1: null as number | null,
@@ -119,6 +123,8 @@ const lineupForm = useHttp({
         speaker_4: null as number | null,
     },
 });
+const lineupPositions: LineupPosition[] = ['speaker_1', 'speaker_2', 'speaker_3', 'speaker_4'];
+let syncingLineupSwap = false;
 
 const scoreSheetForm = useHttp({
     mark_pm: 0,
@@ -148,6 +154,7 @@ const fetchMatchData = async () => {
         judges.value = unwrapCollection<User>(judgesResponse);
         selectedJudges.value = matchData.value?.judge_assignments?.map((assignment) => assignment.judge_id) ?? [];
         isEditingAssignments.value = (matchData.value?.judge_assignments?.length ?? 0) === 0;
+        isEditingLineup.value = false;
     } catch (error) {
         matchData.value = null;
         judges.value = [];
@@ -220,6 +227,50 @@ const applyLineupToForm = (match: Match | null) => {
     lineupForm.clearErrors();
 };
 
+const syncLineupSwap = (
+    sideKey: LineupSideKey,
+    position: LineupPosition,
+    newValue: number | null,
+    oldValue: number | null,
+) => {
+    if (syncingLineupSwap) {
+        return;
+    }
+
+    if (!newValue || newValue === oldValue) {
+        return;
+    }
+
+    const side = lineupForm[sideKey];
+    const duplicatePosition = lineupPositions.find((candidate) => {
+        return candidate !== position && side[candidate] === newValue;
+    });
+
+    if (!duplicatePosition) {
+        return;
+    }
+
+    syncingLineupSwap = true;
+    side[duplicatePosition] = oldValue;
+    syncingLineupSwap = false;
+};
+
+for (const position of lineupPositions) {
+    watch(
+        () => lineupForm.government[position],
+        (newValue, oldValue) => {
+            syncLineupSwap('government', position, newValue, oldValue);
+        },
+    );
+
+    watch(
+        () => lineupForm.opposition[position],
+        (newValue, oldValue) => {
+            syncLineupSwap('opposition', position, newValue, oldValue);
+        },
+    );
+}
+
 const applyScoreSheetToForm = (scoreSheet: ScoreSheet | null) => {
     scoreSheetForm.mark_pm = scoreSheet ? Number(scoreSheet.mark_pm) : 0;
     scoreSheetForm.mark_tpm = scoreSheet ? Number(scoreSheet.mark_tpm) : 0;
@@ -278,11 +329,27 @@ const saveLineup = async () => {
     try {
         await lineupForm.patch(admin.matches.lineup.update(matchData.value.id).url);
         await fetchMatchData();
+        isEditingLineup.value = false;
         toast.success('Lineup perlawanan berjaya dikemas kini.');
     } catch (error) {
         toast.error('Gagal mengemas kini lineup perlawanan.');
         console.error('Failed to save lineup', error);
     }
+};
+
+const startEditingLineup = () => {
+    if (!matchData.value || !canEditLineup.value) {
+        return;
+    }
+
+    applyLineupToForm(matchData.value);
+    isEditingLineup.value = true;
+};
+
+const cancelEditingLineup = () => {
+    applyLineupToForm(matchData.value);
+    lineupForm.clearErrors();
+    isEditingLineup.value = false;
 };
 
 const saveManualAssignments = async () => {
@@ -659,11 +726,16 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
 
                 <div class="space-y-6">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Lineup Perlawanan</CardTitle>
-                            <CardDescription>
-                                Susun lineup khusus untuk perlawanan ini. Perubahan hanya dibenarkan sebelum sebarang borang markah diwujudkan.
-                            </CardDescription>
+                        <CardHeader class="flex flex-row items-start justify-between gap-3">
+                            <div>
+                                <CardTitle>Lineup Perlawanan</CardTitle>
+                                <CardDescription>
+                                    Susun lineup khusus untuk perlawanan ini. Perubahan hanya dibenarkan sebelum sebarang borang markah diwujudkan.
+                                </CardDescription>
+                            </div>
+                            <Button v-if="canEditLineup && !isEditingLineup" size="sm" @click="startEditingLineup">
+                                Edit Lineup
+                            </Button>
                         </CardHeader>
                         <CardContent class="space-y-6">
                             <div
@@ -674,12 +746,12 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
                             </div>
                             <div>
                                 <p class="mb-2 text-xs font-bold uppercase tracking-widest text-primary">Kerajaan</p>
-                                <div v-if="canEditLineup" class="space-y-3">
+                                <div v-if="canEditLineup && isEditingLineup" class="space-y-3">
                                     <div v-for="member in governmentLineup" :key="member.id" class="hidden"></div>
                                     <div v-for="position in ['speaker_1', 'speaker_2', 'speaker_3', 'speaker_4']" :key="`gov-${position}`" class="space-y-2">
                                         <Label :for="`gov-${position}`">{{ position === 'speaker_1' ? 'Pendebat 1' : position === 'speaker_2' ? 'Pendebat 2' : position === 'speaker_3' ? 'Pendebat 3' : 'Pendebat 4 (Simpanan)' }}</Label>
                                         <Select v-model="lineupForm.government[position]" :name="`government.${position}`">
-                                            <SelectTrigger :id="`gov-${position}`">
+                                            <SelectTrigger :id="`gov-${position}`" class="w-full">
                                                 <SelectValue placeholder="Pilih ahli pasukan" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -705,11 +777,11 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
                             </div>
                             <div>
                                 <p class="mb-2 text-xs font-bold uppercase tracking-widest text-destructive">Pembangkang</p>
-                                <div v-if="canEditLineup" class="space-y-3">
+                                <div v-if="canEditLineup && isEditingLineup" class="space-y-3">
                                     <div v-for="position in ['speaker_1', 'speaker_2', 'speaker_3', 'speaker_4']" :key="`opp-${position}`" class="space-y-2">
                                         <Label :for="`opp-${position}`">{{ position === 'speaker_1' ? 'Pendebat 1' : position === 'speaker_2' ? 'Pendebat 2' : position === 'speaker_3' ? 'Pendebat 3' : 'Pendebat 4 (Simpanan)' }}</Label>
                                         <Select v-model="lineupForm.opposition[position]" :name="`opposition.${position}`">
-                                            <SelectTrigger :id="`opp-${position}`">
+                                            <SelectTrigger :id="`opp-${position}`" class="w-full">
                                                 <SelectValue placeholder="Pilih ahli pasukan" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -733,7 +805,10 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
                                     </div>
                                 </div>
                             </div>
-                            <div v-if="canEditLineup" class="flex justify-end">
+                            <div v-if="canEditLineup && isEditingLineup" class="flex justify-end gap-2">
+                                <Button variant="outline" @click="cancelEditingLineup" :disabled="lineupForm.processing">
+                                    Batal
+                                </Button>
                                 <Button @click="saveLineup" :disabled="lineupForm.processing">
                                     Simpan Lineup
                                 </Button>
