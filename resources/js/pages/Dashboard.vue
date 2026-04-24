@@ -7,10 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { unwrapCollection } from '@/lib/httpPayload';
+import { dashboard } from '@/routes';
 import admin from '@/routes/admin';
 import debate from '@/routes/debate';
 import judge from '@/routes/judge';
-import { dashboard } from '@/routes';
 import type { Match, Round, Room, Team, User } from '@/types/debate';
 
 defineOptions({

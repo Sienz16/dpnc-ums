@@ -106,6 +106,7 @@ const deleteRoom = async (room: Room) => {
 
 const toggleStatus = async (room: Room) => {
     const toggleHttp = useHttp({ is_active: !room.is_active });
+
     try {
         await toggleHttp.patch(admin.rooms.update(room.id).url);
         fetchRooms();

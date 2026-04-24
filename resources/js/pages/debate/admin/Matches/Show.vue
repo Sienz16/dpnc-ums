@@ -215,6 +215,10 @@ const memberIdByPosition = (members: TeamMember[] = [], position: TeamMember['sp
     return members.find((member) => member.speaker_position === position)?.id ?? null;
 };
 
+const lineupError = (sideKey: LineupSideKey, position: LineupPosition): string | undefined => {
+    return lineupForm.errors[`${sideKey}.${position}` as keyof typeof lineupForm.errors];
+};
+
 const applyLineupToForm = (match: Match | null) => {
     lineupForm.government.speaker_1 = memberIdByPosition(match?.government_lineup ?? match?.government_team?.members, 'speaker_1');
     lineupForm.government.speaker_2 = memberIdByPosition(match?.government_lineup ?? match?.government_team?.members, 'speaker_2');
@@ -748,7 +752,7 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
                                 <p class="mb-2 text-xs font-bold uppercase tracking-widest text-primary">Kerajaan</p>
                                 <div v-if="canEditLineup && isEditingLineup" class="space-y-3">
                                     <div v-for="member in governmentLineup" :key="member.id" class="hidden"></div>
-                                    <div v-for="position in ['speaker_1', 'speaker_2', 'speaker_3', 'speaker_4']" :key="`gov-${position}`" class="space-y-2">
+                                    <div v-for="position in lineupPositions" :key="`gov-${position}`" class="space-y-2">
                                         <Label :for="`gov-${position}`">{{ position === 'speaker_1' ? 'Pendebat 1' : position === 'speaker_2' ? 'Pendebat 2' : position === 'speaker_3' ? 'Pendebat 3' : 'Pendebat 4 (Simpanan)' }}</Label>
                                         <Select v-model="lineupForm.government[position]" :name="`government.${position}`">
                                             <SelectTrigger :id="`gov-${position}`" class="w-full">
@@ -760,8 +764,8 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
                                                 </SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        <p v-if="lineupForm.errors[`government.${position}`]" class="text-[11px] text-destructive">
-                                            {{ lineupForm.errors[`government.${position}`] }}
+                                        <p v-if="lineupError('government', position)" class="text-[11px] text-destructive">
+                                            {{ lineupError('government', position) }}
                                         </p>
                                     </div>
                                 </div>
@@ -778,7 +782,7 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
                             <div>
                                 <p class="mb-2 text-xs font-bold uppercase tracking-widest text-destructive">Pembangkang</p>
                                 <div v-if="canEditLineup && isEditingLineup" class="space-y-3">
-                                    <div v-for="position in ['speaker_1', 'speaker_2', 'speaker_3', 'speaker_4']" :key="`opp-${position}`" class="space-y-2">
+                                    <div v-for="position in lineupPositions" :key="`opp-${position}`" class="space-y-2">
                                         <Label :for="`opp-${position}`">{{ position === 'speaker_1' ? 'Pendebat 1' : position === 'speaker_2' ? 'Pendebat 2' : position === 'speaker_3' ? 'Pendebat 3' : 'Pendebat 4 (Simpanan)' }}</Label>
                                         <Select v-model="lineupForm.opposition[position]" :name="`opposition.${position}`">
                                             <SelectTrigger :id="`opp-${position}`" class="w-full">
@@ -790,8 +794,8 @@ const speakerNameForField = (field: ScoreFieldMeta, side: 'government' | 'opposi
                                                 </SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        <p v-if="lineupForm.errors[`opposition.${position}`]" class="text-[11px] text-destructive">
-                                            {{ lineupForm.errors[`opposition.${position}`] }}
+                                        <p v-if="lineupError('opposition', position)" class="text-[11px] text-destructive">
+                                            {{ lineupError('opposition', position) }}
                                         </p>
                                     </div>
                                 </div>

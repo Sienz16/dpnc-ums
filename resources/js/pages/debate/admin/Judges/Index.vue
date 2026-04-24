@@ -95,6 +95,7 @@ const saveJudge = async () => {
 
 const toggleStatus = async (judge: User) => {
     const toggleHttp = useHttp({ is_active: !judge.is_active });
+
     try {
         await toggleHttp.patch(admin.judges.update(judge.id).url);
         fetchJudges();
