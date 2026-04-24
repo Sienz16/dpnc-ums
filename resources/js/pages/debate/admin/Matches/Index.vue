@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { useHttp } from '@inertiajs/vue3';
-import { Plus, Eye, MapPin, Trash2 } from 'lucide-vue-next';
+import { Eye, Hourglass, MapPin, Plus, Shuffle, Trash2 } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import Heading from '@/components/Heading.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,13 @@ type LineupSide = {
 };
 type LineupPosition = keyof LineupSide;
 type LineupSideKey = 'government' | 'opposition';
+type RandomizeResponse = {
+    data?: {
+        unpaired_team?: {
+            name?: string;
+        } | null;
+    };
+};
 
 const emptyLineupSide = (): LineupSide => ({
     speaker_1: null,
@@ -71,6 +79,8 @@ const rounds = ref<Round[]>([]);
 const rooms = ref<Room[]>([]);
 const teams = ref<Team[]>([]);
 const loading = ref(true);
+const randomizingFirstRound = ref(false);
+const isRandomizeDialogOpen = ref(false);
 
 const fetchData = async () => {
     loading.value = true;
@@ -136,6 +146,22 @@ const availableTeams = computed(() => {
 
 const availableRooms = computed(() => {
     return rooms.value.filter((room) => !assignedRoomIdsInSelectedRound.value.has(room.id));
+});
+
+const firstRound = computed(() => {
+    return [...rounds.value].sort((a, b) => (a.sequence ?? Number.MAX_SAFE_INTEGER) - (b.sequence ?? Number.MAX_SAFE_INTEGER))[0] ?? null;
+});
+
+const firstRoundMatches = computed(() => {
+    if (!firstRound.value) {
+        return [];
+    }
+
+    return matches.value.filter((match) => match.round_id === firstRound.value?.id);
+});
+
+const canShuffleFirstRound = computed(() => {
+    return Boolean(firstRound.value) && !firstRoundMatches.value.some((match) => match.status !== 'pending');
 });
 
 const openCreateDialog = () => {
@@ -228,6 +254,83 @@ const deleteMatch = async (match: Match) => {
     }
 };
 
+const errorMessageFromResponse = (error: unknown, fallback: string): string => {
+    const maybeError = error as {
+        response?: {
+            data?: string | {
+                message?: string;
+            };
+        };
+        message?: string;
+    };
+
+    if (typeof maybeError.response?.data === 'string') {
+        try {
+            const parsed = JSON.parse(maybeError.response.data) as { message?: string };
+
+            return parsed.message ?? fallback;
+        } catch {
+            return fallback;
+        }
+    }
+
+    return maybeError.response?.data?.message ?? maybeError.message ?? fallback;
+};
+
+const openRandomizeDialog = () => {
+    if (!firstRound.value) {
+        toast.error('Cipta pusingan terlebih dahulu sebelum jana matchup.');
+
+        return;
+    }
+
+    isRandomizeDialogOpen.value = true;
+};
+
+const setRandomizeDialogOpen = (isOpen: boolean) => {
+    if (randomizingFirstRound.value) {
+        return;
+    }
+
+    isRandomizeDialogOpen.value = isOpen;
+};
+
+const wait = (milliseconds: number): Promise<void> => {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+};
+
+const randomizeFirstRound = async () => {
+    if (!firstRound.value) {
+        toast.error('Cipta pusingan terlebih dahulu sebelum jana matchup.');
+
+        return;
+    }
+
+    randomizingFirstRound.value = true;
+
+    try {
+        const [response] = await Promise.all([
+            http.post(admin.rounds.matches.randomize(firstRound.value.id).url) as Promise<RandomizeResponse>,
+            wait(3000),
+        ]);
+
+        await fetchData();
+        isRandomizeDialogOpen.value = false;
+
+        const unpairedTeamName = response?.data?.unpaired_team?.name;
+        const message = unpairedTeamName
+            ? `Matchup pusingan 1 berjaya dijana. ${unpairedTeamName} tidak dipadankan kerana jumlah pasukan ganjil.`
+            : 'Matchup pusingan 1 berjaya dijana.';
+
+        toast.success(message);
+    } catch (error) {
+        toast.error(errorMessageFromResponse(error, 'Gagal menjana matchup rawak pusingan 1.'));
+        console.error('Failed to randomize first round matchups', error);
+    } finally {
+        randomizingFirstRound.value = false;
+    }
+};
+
 watch(
     () => mutationHttp.round_id,
     () => {
@@ -293,12 +396,35 @@ const getStatusVariant = (status: string) => {
     <Head title="Perlawanan" />
 
     <div class="p-6 space-y-6">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <Heading title="Perlawanan" description="Jadualkan dan urus perlawanan debat." />
-            <Button @click="openCreateDialog">
-                <Plus class="w-4 h-4 mr-2" />
-                Cipta Perlawanan
-            </Button>
+            <div class="flex flex-wrap gap-2">
+                <Button variant="outline" @click="openRandomizeDialog" :disabled="loading || randomizingFirstRound || !canShuffleFirstRound">
+                    <Shuffle class="w-4 h-4 mr-2" />
+                    {{ randomizingFirstRound ? 'Menjana...' : firstRoundMatches.length > 0 ? 'Shuffle Semula Pusingan 1' : 'Rawak Pusingan 1' }}
+                </Button>
+                <Button @click="openCreateDialog">
+                    <Plus class="w-4 h-4 mr-2" />
+                    Cipta Perlawanan
+                </Button>
+            </div>
+        </div>
+
+        <div id="generator-rawak" class="rounded-xl border bg-muted/20 p-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold">Generator Rawak Pusingan 1</h2>
+                    <p class="text-sm text-muted-foreground">
+                        Shuffle akan memadam matchup lama pusingan 1 dan menjana padanan baharu daripada pasukan serta bilik aktif.
+                    </p>
+                </div>
+                <div class="text-sm text-muted-foreground">
+                    {{ firstRoundMatches.length }} matchup pusingan 1 sedia ada
+                </div>
+            </div>
+            <p v-if="!canShuffleFirstRound && firstRoundMatches.length > 0" class="mt-3 text-sm text-destructive">
+                Shuffle dikunci kerana ada perlawanan pusingan 1 yang sudah bermula atau selesai.
+            </p>
         </div>
 
         <div class="relative w-full overflow-auto rounded-xl border bg-background">
@@ -583,6 +709,57 @@ const getStatusVariant = (status: string) => {
                     <Button variant="outline" @click="isDialogOpen = false">Batal</Button>
                     <Button @click="saveMatch">Cipta Perlawanan</Button>
                 </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog :open="isRandomizeDialogOpen" @update:open="setRandomizeDialogOpen">
+            <DialogContent class="sm:max-w-[440px]" :show-close-button="!randomizingFirstRound">
+                <template v-if="randomizingFirstRound">
+                    <div class="flex flex-col items-center gap-4 py-6 text-center">
+                        <div class="flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Hourglass class="size-8 motion-safe:animate-spin" />
+                        </div>
+                        <div class="space-y-2">
+                            <DialogTitle>Sedang shuffle matchup...</DialogTitle>
+                            <DialogDescription>
+                                Sistem sedang menjana padanan rawak pusingan 1. Tunggu sebentar supaya proses selesai dengan kemas.
+                            </DialogDescription>
+                        </div>
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div class="h-full w-full animate-pulse rounded-full bg-primary"></div>
+                        </div>
+                    </div>
+                </template>
+
+                <template v-else>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {{ firstRoundMatches.length > 0 ? 'Shuffle semula pusingan 1?' : 'Rawak pusingan 1?' }}
+                        </DialogTitle>
+                        <DialogDescription>
+                            <span v-if="firstRoundMatches.length > 0">
+                                Matchup lama pusingan 1 akan dipadam dan diganti dengan padanan rawak baharu.
+                            </span>
+                            <span v-else>
+                                Sistem akan menjana matchup rawak untuk pusingan 1 menggunakan pasukan dan bilik aktif.
+                            </span>
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div class="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                        Tindakan ini hanya dibenarkan selagi semua perlawanan pusingan 1 masih belum bermula.
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" @click="isRandomizeDialogOpen = false">
+                            Batal
+                        </Button>
+                        <Button @click="randomizeFirstRound">
+                            <Shuffle class="mr-2 size-4" />
+                            {{ firstRoundMatches.length > 0 ? 'Shuffle sekarang' : 'Rawak sekarang' }}
+                        </Button>
+                    </DialogFooter>
+                </template>
             </DialogContent>
         </Dialog>
     </div>

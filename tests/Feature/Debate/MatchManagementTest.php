@@ -227,6 +227,75 @@ test('cannot update match with room already assigned in the same round', functio
         ->assertInvalid(['room_id']);
 });
 
+test('superadmin can randomize first round matchups and reshuffle pending matches', function () {
+    $superadmin = User::factory()->superadmin()->create();
+
+    $round = Round::factory()->create(['sequence' => 1]);
+    $rooms = Room::factory()->count(3)->create();
+    $teams = Team::factory()->count(6)->create();
+
+    $firstResponse = $this->actingAs($superadmin)
+        ->postJson("/admin/rounds/{$round->id}/matches/randomize");
+
+    $firstResponse->assertCreated()
+        ->assertJsonPath('data.created_matches_count', 3)
+        ->assertJsonPath('data.unpaired_team', null);
+
+    $firstMatchIds = DebateMatch::query()
+        ->where('round_id', $round->id)
+        ->pluck('id')
+        ->all();
+
+    expect($firstMatchIds)->toHaveCount(3);
+
+    $assignedTeamIds = DebateMatch::query()
+        ->where('round_id', $round->id)
+        ->get()
+        ->flatMap(fn (DebateMatch $match): array => [
+            $match->government_team_id,
+            $match->opposition_team_id,
+        ])
+        ->sort()
+        ->values()
+        ->all();
+
+    expect($assignedTeamIds)->toBe($teams->pluck('id')->sort()->values()->all());
+
+    $secondResponse = $this->actingAs($superadmin)
+        ->postJson("/admin/rounds/{$round->id}/matches/randomize");
+
+    $secondResponse->assertCreated()
+        ->assertJsonPath('data.created_matches_count', 3);
+
+    DebateMatch::query()
+        ->whereIn('id', $firstMatchIds)
+        ->each(fn (DebateMatch $match) => $this->assertModelMissing($match));
+
+    expect(DebateMatch::query()->where('round_id', $round->id)->count())->toBe(3);
+    expect(DebateMatch::query()->where('round_id', $round->id)->pluck('room_id')->unique()->count())->toBe($rooms->count());
+});
+
+test('superadmin cannot reshuffle first round after a match has started', function () {
+    $superadmin = User::factory()->superadmin()->create();
+
+    $round = Round::factory()->create(['sequence' => 1]);
+    $room = Room::factory()->create();
+    $governmentTeam = Team::factory()->create();
+    $oppositionTeam = Team::factory()->create();
+
+    DebateMatch::factory()->create([
+        'round_id' => $round->id,
+        'room_id' => $room->id,
+        'government_team_id' => $governmentTeam->id,
+        'opposition_team_id' => $oppositionTeam->id,
+        'status' => MatchStatus::InProgress,
+    ]);
+
+    $this->actingAs($superadmin)
+        ->postJson("/admin/rounds/{$round->id}/matches/randomize")
+        ->assertUnprocessable();
+});
+
 test('can create match with a match specific lineup override', function () {
     $superadmin = User::factory()->superadmin()->create();
 

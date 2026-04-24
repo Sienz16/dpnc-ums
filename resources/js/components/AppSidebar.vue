@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import { usePage } from '@inertiajs/vue3';
-import { LayoutGrid, Users, Calendar, MapPin, Shield, Trophy, FileText, Swords } from 'lucide-vue-next';
+import { Calendar, FileText, LayoutGrid, MapPin, Shield, Swords, Trophy, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';

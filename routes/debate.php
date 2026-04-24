@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\RankingController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\RoomController;
 use App\Http\Controllers\Admin\RoundController;
+use App\Http\Controllers\Admin\RoundMatchRandomizerController;
 use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Admin\TeamMemberController;
 use App\Http\Controllers\Judge\JudgeCheckInController;
@@ -23,6 +24,7 @@ Route::middleware(['auth', 'role:superadmin'])->prefix('admin')->name('admin.')-
     Route::patch('judges/{judge}', [JudgeController::class, 'update'])->name('judges.update');
 
     Route::apiResource('rounds', RoundController::class)->except(['show']);
+    Route::post('rounds/{round}/matches/randomize', RoundMatchRandomizerController::class)->name('rounds.matches.randomize');
     Route::apiResource('rooms', RoomController::class)->except(['show']);
     Route::apiResource('teams', TeamController::class);
 
