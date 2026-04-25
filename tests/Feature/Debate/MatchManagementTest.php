@@ -79,6 +79,51 @@ test('superadmin can delete completed match with judging records', function () {
     $this->assertModelMissing($matchSpeaker);
 });
 
+test('match index lists unfinished matches before completed matches', function () {
+    $superadmin = User::factory()->superadmin()->create();
+    $round = Round::factory()->create();
+    $rooms = Room::factory()->count(3)->create();
+    $teams = Team::factory()->count(6)->create();
+
+    $completedMatch = DebateMatch::factory()->create([
+        'round_id' => $round->id,
+        'room_id' => $rooms[0]->id,
+        'government_team_id' => $teams[0]->id,
+        'opposition_team_id' => $teams[1]->id,
+        'status' => MatchStatus::Completed,
+        'scheduled_at' => now()->addHours(3),
+    ]);
+
+    $inProgressMatch = DebateMatch::factory()->create([
+        'round_id' => $round->id,
+        'room_id' => $rooms[1]->id,
+        'government_team_id' => $teams[2]->id,
+        'opposition_team_id' => $teams[3]->id,
+        'status' => MatchStatus::InProgress,
+        'scheduled_at' => now()->addHours(2),
+    ]);
+
+    $pendingMatch = DebateMatch::factory()->create([
+        'round_id' => $round->id,
+        'room_id' => $rooms[2]->id,
+        'government_team_id' => $teams[4]->id,
+        'opposition_team_id' => $teams[5]->id,
+        'status' => MatchStatus::Pending,
+        'scheduled_at' => now()->addHour(),
+    ]);
+
+    $matchIds = $this->actingAs($superadmin)
+        ->getJson('/admin/matches')
+        ->assertOk()
+        ->json('data.*.id');
+
+    expect(array_slice($matchIds, 0, 3))->toBe([
+        $pendingMatch->id,
+        $inProgressMatch->id,
+        $completedMatch->id,
+    ]);
+});
+
 test('cannot create match with team already assigned in the same round', function () {
     $superadmin = User::factory()->superadmin()->create();
 
