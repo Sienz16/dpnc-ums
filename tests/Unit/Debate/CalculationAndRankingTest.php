@@ -297,6 +297,67 @@ test('team ranking breaks ties by judge count then official margin then score', 
     expect((float) $rankings[1]['average_margin'])->toBe(0.5);
 });
 
+test('team ranking can prioritize the selected factor sequence', function () {
+    $teamA = Team::factory()->create(['name' => 'Alpha']);
+    $teamB = Team::factory()->create(['name' => 'Beta']);
+    $teamC = Team::factory()->create(['name' => 'Gamma']);
+    $teamD = Team::factory()->create(['name' => 'Delta']);
+    $teamE = Team::factory()->create(['name' => 'Epsilon']);
+    $teamF = Team::factory()->create(['name' => 'Zeta']);
+
+    $match1 = DebateMatch::factory()->create([
+        'government_team_id' => $teamA->id,
+        'opposition_team_id' => $teamC->id,
+    ]);
+
+    $match2 = DebateMatch::factory()->create([
+        'government_team_id' => $teamB->id,
+        'opposition_team_id' => $teamD->id,
+    ]);
+
+    $match3 = DebateMatch::factory()->create([
+        'government_team_id' => $teamE->id,
+        'opposition_team_id' => $teamF->id,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match1->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 1,
+        'loser_vote_count' => 0,
+        'official_margin' => 8,
+        'official_team_score_government' => 280,
+        'official_team_score_opposition' => 272,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match2->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 3,
+        'loser_vote_count' => 0,
+        'official_margin' => 2,
+        'official_team_score_government' => 300,
+        'official_team_score_opposition' => 298,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match3->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 1,
+        'loser_vote_count' => 0,
+        'official_margin' => 1,
+        'official_team_score_government' => 320,
+        'official_team_score_opposition' => 319,
+    ]);
+
+    $rankingService = app(RankingService::class);
+
+    expect($rankingService->teamRankings()->first()['team_name'])->toBe('Beta');
+    expect($rankingService->teamRankings(['margin', 'win', 'marks', 'judge'])->first()['team_name'])->toBe('Alpha');
+    expect($rankingService->teamRankings(['marks', 'margin', 'win', 'judge'])->first()['team_name'])->toBe('Epsilon');
+    expect($rankingService->teamRankings(['judge', 'margin', 'marks', 'win'])->first()['team_name'])->toBe('Beta');
+});
+
 test('speaker ranking uses match specific lineup overrides', function () {
     $governmentTeam = Team::factory()->create(['name' => 'Gov']);
     $oppositionTeam = Team::factory()->create(['name' => 'Opp']);

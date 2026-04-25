@@ -2,13 +2,23 @@
 import { Head } from '@inertiajs/vue3';
 import { useHttp } from '@inertiajs/vue3';
 import { Link } from '@inertiajs/vue3';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { unwrapCollection } from '@/lib/httpPayload';
 import admin from '@/routes/admin';
 import debate from '@/routes/debate';
 import type { TeamRanking } from '@/types/debate';
+
+type TeamRankingFactor = 'win' | 'margin' | 'marks' | 'judge';
 
 defineOptions({
     layout: {
@@ -28,12 +38,41 @@ defineOptions({
 const http = useHttp();
 const rankings = ref<TeamRanking[]>([]);
 const loading = ref(true);
+const rankingSequence = ref<TeamRankingFactor[]>(['win', 'judge', 'margin', 'marks']);
+
+const rankingFactorLabels: Record<TeamRankingFactor, string> = {
+    win: 'Menang',
+    judge: 'Hakim',
+    margin: 'Margin',
+    marks: 'Markah',
+};
+
+const rankingPriorityLabels = ['Pertama', 'Kedua', 'Ketiga', 'Keempat'];
+
+const updateRankingSequence = (index: number, nextFactor: TeamRankingFactor) => {
+    const items = [...rankingSequence.value];
+    const existingIndex = items.indexOf(nextFactor);
+
+    if (existingIndex !== -1) {
+        items[existingIndex] = items[index];
+    }
+
+    items[index] = nextFactor;
+    rankingSequence.value = items;
+};
+
+const teamRankingsUrl = () => {
+    const url = new URL(admin.rankings.teams().url, window.location.origin);
+    rankingSequence.value.forEach((factor) => url.searchParams.append('ranking_sequence[]', factor));
+
+    return `${url.pathname}${url.search}`;
+};
 
 const fetchRankings = async () => {
     loading.value = true;
 
     try {
-        const response = await http.get(admin.rankings.teams().url);
+        const response = await http.get(teamRankingsUrl());
         rankings.value = unwrapCollection<TeamRanking>(response);
     } catch (error) {
         rankings.value = [];
@@ -44,16 +83,37 @@ const fetchRankings = async () => {
 };
 
 onMounted(fetchRankings);
+watch(rankingSequence, fetchRankings);
 </script>
 
 <template>
     <Head title="Kedudukan Pasukan" />
 
     <div class="p-6 space-y-6">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <Heading title="Kedudukan Pasukan" description="Kedudukan keseluruhan kejohanan untuk semua pasukan." />
-            <div class="flex gap-2">
-                <Button variant="outline" as-child>
+            <div class="flex w-full flex-col gap-3 xl:w-auto xl:flex-row xl:items-end xl:justify-end">
+                <div class="min-w-0 flex-1 space-y-2 xl:w-[34rem] xl:flex-none">
+                    <Label>Keutamaan Susunan</Label>
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        <div v-for="(factor, index) in rankingSequence" :key="index" class="space-y-1.5">
+                            <Label :for="`team-ranking-factor-${index}`" class="text-xs text-muted-foreground">
+                                {{ rankingPriorityLabels[index] }}
+                            </Label>
+                            <Select :model-value="factor" @update:model-value="(value) => updateRankingSequence(index, value as TeamRankingFactor)">
+                                <SelectTrigger :id="`team-ranking-factor-${index}`">
+                                    <SelectValue placeholder="Pilih" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem v-for="label, value in rankingFactorLabels" :key="value" :value="value">
+                                        {{ label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                </div>
+                <Button variant="outline" as-child class="w-full xl:w-auto">
                     <Link :href="debate.admin.rankings.speakers().url">Kedudukan Pendebat</Link>
                 </Button>
             </div>

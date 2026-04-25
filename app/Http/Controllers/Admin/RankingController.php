@@ -5,17 +5,22 @@ namespace App\Http\Controllers\Admin;
 use App\Domain\Debate\Services\RankingService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class RankingController extends Controller
 {
-    public function __construct(private RankingService $rankingService)
-    {
-    }
+    public function __construct(private RankingService $rankingService) {}
 
-    public function teams(): JsonResponse
+    public function teams(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'ranking_sequence' => ['sometimes', 'array', 'list'],
+            'ranking_sequence.*' => ['string', 'distinct', Rule::in(['win', 'margin', 'marks', 'judge'])],
+        ]);
+
         return response()->json([
-            'data' => $this->rankingService->teamRankings(),
+            'data' => $this->rankingService->teamRankings($validated['ranking_sequence'] ?? []),
         ]);
     }
 

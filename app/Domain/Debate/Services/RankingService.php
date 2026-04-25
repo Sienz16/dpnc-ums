@@ -13,13 +13,25 @@ use Illuminate\Support\Collection;
 
 class RankingService
 {
+    private const array DefaultTeamRankingSequence = ['win', 'judge', 'margin', 'marks'];
+
+    private const array TeamRankingFields = [
+        'win' => 'win_count',
+        'judge' => 'judge_count',
+        'margin' => 'average_margin',
+        'marks' => 'average_team_score',
+    ];
+
     public function __construct(private MatchLineupService $matchLineupService) {}
 
     /**
+     * @param  array<int, string>  $rankingSequence
      * @return Collection<int, array<string, mixed>>
      */
-    public function teamRankings(): Collection
+    public function teamRankings(array $rankingSequence = []): Collection
     {
+        $sortFields = $this->teamRankingSortFields($rankingSequence);
+
         $rows = Team::query()
             ->get()
             ->mapWithKeys(fn (Team $team): array => [$team->id => [
@@ -95,26 +107,47 @@ class RankingService
 
                 return $row;
             })
-            ->sort(function (array $left, array $right): int {
-                if ($left['win_count'] !== $right['win_count']) {
-                    return $right['win_count'] <=> $left['win_count'];
-                }
-
-                if ($left['judge_count'] !== $right['judge_count']) {
-                    return $right['judge_count'] <=> $left['judge_count'];
-                }
-
-                if ($left['average_margin'] !== $right['average_margin']) {
-                    return $right['average_margin'] <=> $left['average_margin'];
-                }
-
-                if ($left['average_team_score'] !== $right['average_team_score']) {
-                    return $right['average_team_score'] <=> $left['average_team_score'];
-                }
-
-                return $left['team_name'] <=> $right['team_name'];
-            })
+            ->sort(fn (array $left, array $right): int => $this->compareTeamRankingRows($left, $right, $sortFields))
             ->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     * @param  array<int, string>  $sortFields
+     */
+    private function compareTeamRankingRows(array $left, array $right, array $sortFields): int
+    {
+        foreach ($sortFields as $field) {
+            if ($left[$field] !== $right[$field]) {
+                return $right[$field] <=> $left[$field];
+            }
+        }
+
+        return $left['team_name'] <=> $right['team_name'];
+    }
+
+    /**
+     * @param  array<int, string>  $rankingSequence
+     * @return array<int, string>
+     */
+    private function teamRankingSortFields(array $rankingSequence): array
+    {
+        $normalizedSequence = array_values(array_unique(array_filter(
+            $rankingSequence,
+            fn (string $factor): bool => array_key_exists($factor, self::TeamRankingFields),
+        )));
+
+        foreach (self::DefaultTeamRankingSequence as $factor) {
+            if (! in_array($factor, $normalizedSequence, true)) {
+                $normalizedSequence[] = $factor;
+            }
+        }
+
+        return array_map(
+            fn (string $factor): string => self::TeamRankingFields[$factor],
+            $normalizedSequence,
+        );
     }
 
     /**
