@@ -16,7 +16,7 @@ import {
 import { unwrapCollection } from '@/lib/httpPayload';
 import admin from '@/routes/admin';
 import debate from '@/routes/debate';
-import type { TeamRanking } from '@/types/debate';
+import type { Round, TeamRanking } from '@/types/debate';
 
 type TeamRankingFactor = 'win' | 'margin' | 'marks' | 'judge';
 
@@ -37,8 +37,11 @@ defineOptions({
 
 const http = useHttp();
 const rankings = ref<TeamRanking[]>([]);
+const rounds = ref<Round[]>([]);
 const loading = ref(true);
+const roundsLoading = ref(true);
 const rankingSequence = ref<TeamRankingFactor[]>(['win', 'judge', 'margin', 'marks']);
+const selectedRoundIds = ref<number[]>([]);
 
 const rankingFactorLabels: Record<TeamRankingFactor, string> = {
     win: 'Menang',
@@ -64,8 +67,23 @@ const updateRankingSequence = (index: number, nextFactor: TeamRankingFactor) => 
 const teamRankingsUrl = () => {
     const url = new URL(admin.rankings.teams().url, window.location.origin);
     rankingSequence.value.forEach((factor) => url.searchParams.append('ranking_sequence[]', factor));
+    selectedRoundIds.value.forEach((roundId) => url.searchParams.append('round_ids[]', String(roundId)));
 
     return `${url.pathname}${url.search}`;
+};
+
+const fetchRounds = async () => {
+    roundsLoading.value = true;
+
+    try {
+        const response = await http.get(admin.rounds.index().url);
+        rounds.value = unwrapCollection<Round>(response);
+    } catch (error) {
+        rounds.value = [];
+        console.error('Failed to load rounds', error);
+    } finally {
+        roundsLoading.value = false;
+    }
 };
 
 const fetchRankings = async () => {
@@ -82,8 +100,21 @@ const fetchRankings = async () => {
     }
 };
 
-onMounted(fetchRankings);
-watch(rankingSequence, fetchRankings);
+const toggleRound = (roundId: number) => {
+    selectedRoundIds.value = selectedRoundIds.value.includes(roundId)
+        ? selectedRoundIds.value.filter((id) => id !== roundId)
+        : [...selectedRoundIds.value, roundId];
+};
+
+const selectAllRounds = () => {
+    selectedRoundIds.value = [];
+};
+
+onMounted(() => {
+    fetchRounds();
+    fetchRankings();
+});
+watch([rankingSequence, selectedRoundIds], fetchRankings);
 </script>
 
 <template>
@@ -92,7 +123,29 @@ watch(rankingSequence, fetchRankings);
     <div class="p-6 space-y-6">
         <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <Heading title="Kedudukan Pasukan" description="Kedudukan keseluruhan kejohanan untuk semua pasukan." />
-            <div class="flex w-full flex-col gap-3 xl:w-auto xl:flex-row xl:items-end xl:justify-end">
+            <div class="flex w-full flex-col gap-4 xl:w-auto xl:items-end">
+                <div class="w-full space-y-2 xl:w-[45rem]">
+                    <Label>Skop Pusingan</Label>
+                    <div class="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" :data-active="selectedRoundIds.length === 0" class="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground" @click="selectAllRounds">
+                            Semua Pusingan
+                        </Button>
+                        <Button
+                            v-for="round in rounds"
+                            :key="round.id"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            :data-active="selectedRoundIds.includes(round.id)"
+                            class="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                            @click="toggleRound(round.id)"
+                        >
+                            {{ round.name }}
+                        </Button>
+                        <div v-if="roundsLoading" class="h-8 w-28 animate-pulse rounded-md bg-muted"></div>
+                    </div>
+                </div>
+                <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-end xl:justify-end">
                 <div class="min-w-0 flex-1 space-y-2 xl:w-[34rem] xl:flex-none">
                     <Label>Keutamaan Susunan</Label>
                     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -116,6 +169,7 @@ watch(rankingSequence, fetchRankings);
                 <Button variant="outline" as-child class="w-full xl:w-auto">
                     <Link :href="debate.admin.rankings.speakers().url">Kedudukan Pendebat</Link>
                 </Button>
+                </div>
             </div>
         </div>
 
@@ -127,7 +181,7 @@ watch(rankingSequence, fetchRankings);
                                 <th class="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Pasukan</th>
                                 <th class="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Menang</th>
                                 <th class="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Hakim</th>
-                                <th class="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Purata Margin</th>
+                                <th class="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Jumlah Margin</th>
                                 <th class="h-12 px-4 text-center align-middle font-medium text-muted-foreground">Purata Markah</th>
                             </tr>
                         </thead>
@@ -164,7 +218,7 @@ watch(rankingSequence, fetchRankings);
                                 </td>
                                 <td class="p-4 align-middle text-center font-black text-lg">{{ team.win_count }}</td>
                                 <td class="p-4 align-middle text-center">{{ team.judge_count }}</td>
-                                <td class="p-4 align-middle text-center">{{ Number(team.average_margin).toFixed(1) }}</td>
+                                <td class="p-4 align-middle text-center">{{ Number(team.total_margin).toFixed(1) }}</td>
                                 <td class="p-4 align-middle text-center">{{ Number(team.average_team_score).toFixed(1) }}</td>
                             </tr>
                         </tbody>

@@ -17,17 +17,29 @@ class RankingController extends Controller
         $validated = $request->validate([
             'ranking_sequence' => ['sometimes', 'array', 'list'],
             'ranking_sequence.*' => ['string', 'distinct', Rule::in(['win', 'margin', 'marks', 'judge'])],
+            'round_ids' => ['sometimes', 'array', 'list'],
+            'round_ids.*' => ['integer', 'exists:rounds,id'],
         ]);
 
         return response()->json([
-            'data' => $this->rankingService->teamRankings($validated['ranking_sequence'] ?? []),
+            'data' => $this->rankingService->teamRankings(
+                rankingSequence: $validated['ranking_sequence'] ?? [],
+                roundIds: $validated['round_ids'] ?? [],
+            ),
         ]);
     }
 
-    public function speakers(): JsonResponse
+    public function speakers(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'round_ids' => ['sometimes', 'array', 'list'],
+            'round_ids.*' => ['integer', 'exists:rounds,id'],
+        ]);
+
         return response()->json([
-            'data' => $this->rankingService->speakerRankings(),
+            'data' => $this->rankingService->speakerRankings(
+                roundIds: $validated['round_ids'] ?? [],
+            ),
         ]);
     }
 }

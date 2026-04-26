@@ -3,7 +3,7 @@ import { Head } from '@inertiajs/vue3';
 import { useHttp } from '@inertiajs/vue3';
 import { Link } from '@inertiajs/vue3';
 import { Award, Star } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import Heading from '@/components/Heading.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -17,7 +17,7 @@ import {
 import { unwrapCollection } from '@/lib/httpPayload';
 import admin from '@/routes/admin';
 import debate from '@/routes/debate';
-import type { SpeakerRanking } from '@/types/debate';
+import type { Round, SpeakerRanking } from '@/types/debate';
 
 type SpeakerRankingFilter = 'highest_mark' | 'highest_best_speaker_win';
 
@@ -38,14 +38,38 @@ defineOptions({
 
 const http = useHttp();
 const rankings = ref<SpeakerRanking[]>([]);
+const rounds = ref<Round[]>([]);
 const loading = ref(true);
+const roundsLoading = ref(true);
 const rankingFilter = ref<SpeakerRankingFilter>('highest_mark');
+const selectedRoundIds = ref<number[]>([]);
+
+const speakerRankingsUrl = () => {
+    const url = new URL(admin.rankings.speakers().url, window.location.origin);
+    selectedRoundIds.value.forEach((roundId) => url.searchParams.append('round_ids[]', String(roundId)));
+
+    return `${url.pathname}${url.search}`;
+};
+
+const fetchRounds = async () => {
+    roundsLoading.value = true;
+
+    try {
+        const response = await http.get(admin.rounds.index().url);
+        rounds.value = unwrapCollection<Round>(response);
+    } catch (error) {
+        rounds.value = [];
+        console.error('Failed to load rounds', error);
+    } finally {
+        roundsLoading.value = false;
+    }
+};
 
 const fetchRankings = async () => {
     loading.value = true;
 
     try {
-        const response = await http.get(admin.rankings.speakers().url);
+        const response = await http.get(speakerRankingsUrl());
         rankings.value = unwrapCollection<SpeakerRanking>(response);
     } catch (error) {
         rankings.value = [];
@@ -55,7 +79,21 @@ const fetchRankings = async () => {
     }
 };
 
-onMounted(fetchRankings);
+const toggleRound = (roundId: number) => {
+    selectedRoundIds.value = selectedRoundIds.value.includes(roundId)
+        ? selectedRoundIds.value.filter((id) => id !== roundId)
+        : [...selectedRoundIds.value, roundId];
+};
+
+const selectAllRounds = () => {
+    selectedRoundIds.value = [];
+};
+
+onMounted(() => {
+    fetchRounds();
+    fetchRankings();
+});
+watch(selectedRoundIds, fetchRankings);
 
 const filteredRankings = computed(() => {
     const items = [...rankings.value];
@@ -94,26 +132,49 @@ const filteredRankings = computed(() => {
     <div class="p-6 space-y-6">
         <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <Heading title="Kedudukan Pendebat" description="Prestasi individu pendebat merentas semua perlawanan." />
-            <div class="flex w-full flex-col gap-3 xl:w-auto xl:flex-row xl:items-end xl:justify-end">
-                <div class="min-w-0 flex-1 space-y-2 xl:w-72 xl:flex-none">
-                    <Label for="speaker-ranking-filter">Tapis Kedudukan</Label>
-                    <Select v-model="rankingFilter">
-                        <SelectTrigger id="speaker-ranking-filter">
-                            <SelectValue placeholder="Pilih susunan" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="highest_mark">
-                                Markah Tertinggi
-                            </SelectItem>
-                            <SelectItem value="highest_best_speaker_win">
-                                Menang Pendebat Terbaik Tertinggi
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
+            <div class="flex w-full flex-col gap-4 xl:w-auto xl:items-end">
+                <div class="w-full space-y-2 xl:w-[45rem]">
+                    <Label>Skop Pusingan</Label>
+                    <div class="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" :data-active="selectedRoundIds.length === 0" class="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground" @click="selectAllRounds">
+                            Semua Pusingan
+                        </Button>
+                        <Button
+                            v-for="round in rounds"
+                            :key="round.id"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            :data-active="selectedRoundIds.includes(round.id)"
+                            class="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                            @click="toggleRound(round.id)"
+                        >
+                            {{ round.name }}
+                        </Button>
+                        <div v-if="roundsLoading" class="h-8 w-28 animate-pulse rounded-md bg-muted"></div>
+                    </div>
                 </div>
-                <Button variant="outline" as-child class="w-full xl:w-auto">
-                    <Link :href="debate.admin.rankings.teams().url">Kedudukan Pasukan</Link>
-                </Button>
+                <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-end xl:justify-end">
+                    <div class="min-w-0 flex-1 space-y-2 xl:w-72 xl:flex-none">
+                        <Label for="speaker-ranking-filter">Tapis Kedudukan</Label>
+                        <Select v-model="rankingFilter">
+                            <SelectTrigger id="speaker-ranking-filter">
+                                <SelectValue placeholder="Pilih susunan" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="highest_mark">
+                                    Markah Tertinggi
+                                </SelectItem>
+                                <SelectItem value="highest_best_speaker_win">
+                                    Menang Pendebat Terbaik Tertinggi
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button variant="outline" as-child class="w-full xl:w-auto">
+                        <Link :href="debate.admin.rankings.teams().url">Kedudukan Pasukan</Link>
+                    </Button>
+                </div>
             </div>
         </div>
 

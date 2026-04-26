@@ -161,6 +161,7 @@ export interface TeamRanking {
     win_count: number;
     judge_count: number;
     average_margin: number;
+    total_margin: number;
     average_team_score: number;
 }
 

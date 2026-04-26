@@ -358,6 +358,52 @@ test('team ranking can prioritize the selected factor sequence', function () {
     expect($rankingService->teamRankings(['judge', 'margin', 'marks', 'win'])->first()['team_name'])->toBe('Beta');
 });
 
+test('team ranking can be scoped to selected rounds and uses total margin', function () {
+    $roundOne = Round::factory()->create(['sequence' => 1]);
+    $roundTwo = Round::factory()->create(['sequence' => 2]);
+    $teamA = Team::factory()->create(['name' => 'Alpha']);
+    $teamB = Team::factory()->create(['name' => 'Beta']);
+
+    $match1 = DebateMatch::factory()->create([
+        'round_id' => $roundOne->id,
+        'government_team_id' => $teamA->id,
+        'opposition_team_id' => $teamB->id,
+    ]);
+
+    $match2 = DebateMatch::factory()->create([
+        'round_id' => $roundTwo->id,
+        'government_team_id' => $teamB->id,
+        'opposition_team_id' => $teamA->id,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match1->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 3,
+        'loser_vote_count' => 0,
+        'official_margin' => 8,
+        'official_team_score_government' => 300,
+        'official_team_score_opposition' => 292,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match2->id,
+        'winner_side' => TeamSide::Government,
+        'winner_vote_count' => 3,
+        'loser_vote_count' => 0,
+        'official_margin' => 2,
+        'official_team_score_government' => 288,
+        'official_team_score_opposition' => 286,
+    ]);
+
+    $allRoundsRankings = app(RankingService::class)->teamRankings();
+    $roundOneRankings = app(RankingService::class)->teamRankings(roundIds: [$roundOne->id]);
+
+    expect((float) $allRoundsRankings->firstWhere('team_name', 'Alpha')['total_margin'])->toBe(6.0);
+    expect((float) $roundOneRankings->firstWhere('team_name', 'Alpha')['total_margin'])->toBe(8.0);
+    expect((float) $roundOneRankings->firstWhere('team_name', 'Beta')['total_margin'])->toBe(-8.0);
+});
+
 test('speaker ranking uses match specific lineup overrides', function () {
     $governmentTeam = Team::factory()->create(['name' => 'Gov']);
     $oppositionTeam = Team::factory()->create(['name' => 'Opp']);
@@ -428,4 +474,65 @@ test('speaker ranking uses match specific lineup overrides', function () {
     expect($reserveRow)->not->toBeNull();
     expect($reserveRow['average_official_points_per_appearance'])->toBe(83.0);
     expect($speakerOneRow)->toBeNull();
+});
+
+test('speaker ranking can be scoped to selected rounds', function () {
+    $roundOne = Round::factory()->create(['sequence' => 1]);
+    $roundTwo = Round::factory()->create(['sequence' => 2]);
+    $governmentTeam = Team::factory()->create(['name' => 'Gov']);
+    $oppositionTeam = Team::factory()->create(['name' => 'Opp']);
+
+    $govPm = TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerOne, 'full_name' => 'Gov PM']);
+    TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerTwo]);
+    TeamMember::factory()->create(['team_id' => $governmentTeam->id, 'speaker_position' => SpeakerPosition::SpeakerThree]);
+
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerOne]);
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerTwo]);
+    TeamMember::factory()->create(['team_id' => $oppositionTeam->id, 'speaker_position' => SpeakerPosition::SpeakerThree]);
+
+    $match1 = DebateMatch::factory()->create([
+        'round_id' => $roundOne->id,
+        'government_team_id' => $governmentTeam->id,
+        'opposition_team_id' => $oppositionTeam->id,
+    ]);
+
+    $match2 = DebateMatch::factory()->create([
+        'round_id' => $roundTwo->id,
+        'government_team_id' => $governmentTeam->id,
+        'opposition_team_id' => $oppositionTeam->id,
+    ]);
+
+    ScoreSheet::factory()->create([
+        'match_id' => $match1->id,
+        'mark_pm' => 80,
+        'state' => ScoreSheetState::Submitted,
+        'submitted_at' => now(),
+    ]);
+
+    ScoreSheet::factory()->create([
+        'match_id' => $match2->id,
+        'mark_pm' => 60,
+        'state' => ScoreSheetState::Submitted,
+        'submitted_at' => now(),
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match1->id,
+        'best_speaker_member_id' => $govPm->id,
+    ]);
+
+    MatchResult::factory()->create([
+        'match_id' => $match2->id,
+        'best_speaker_member_id' => $govPm->id,
+    ]);
+
+    $allRoundsRow = app(RankingService::class)->speakerRankings()->firstWhere('speaker_id', $govPm->id);
+    $roundOneRow = app(RankingService::class)->speakerRankings(roundIds: [$roundOne->id])->firstWhere('speaker_id', $govPm->id);
+
+    expect($allRoundsRow['appearances'])->toBe(2);
+    expect((float) $allRoundsRow['average_official_points_per_appearance'])->toBe(70.0);
+    expect($allRoundsRow['best_speaker_wins_count'])->toBe(2);
+    expect($roundOneRow['appearances'])->toBe(1);
+    expect((float) $roundOneRow['average_official_points_per_appearance'])->toBe(80.0);
+    expect($roundOneRow['best_speaker_wins_count'])->toBe(1);
 });

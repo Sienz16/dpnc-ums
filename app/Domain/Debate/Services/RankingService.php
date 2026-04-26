@@ -18,7 +18,7 @@ class RankingService
     private const array TeamRankingFields = [
         'win' => 'win_count',
         'judge' => 'judge_count',
-        'margin' => 'average_margin',
+        'margin' => 'total_margin',
         'marks' => 'average_team_score',
     ];
 
@@ -26,11 +26,13 @@ class RankingService
 
     /**
      * @param  array<int, string>  $rankingSequence
+     * @param  array<int, int>  $roundIds
      * @return Collection<int, array<string, mixed>>
      */
-    public function teamRankings(array $rankingSequence = []): Collection
+    public function teamRankings(array $rankingSequence = [], array $roundIds = []): Collection
     {
         $sortFields = $this->teamRankingSortFields($rankingSequence);
+        $roundIds = array_values(array_unique(array_map('intval', $roundIds)));
 
         $rows = Team::query()
             ->get()
@@ -40,6 +42,7 @@ class RankingService
                 'win_count' => 0,
                 'judge_count' => 0,
                 'average_margin' => 0.0,
+                'total_margin' => 0.0,
                 'average_team_score' => 0.0,
                 '_margins' => [],
                 '_scores' => [],
@@ -48,6 +51,10 @@ class RankingService
 
         MatchResult::query()
             ->with('match')
+            ->when($roundIds !== [], fn ($query) => $query->whereHas(
+                'match',
+                fn ($query) => $query->whereIn('round_id', $roundIds),
+            ))
             ->get()
             ->each(function (MatchResult $result) use (&$rows): void {
                 $match = $result->match;
@@ -70,6 +77,7 @@ class RankingService
 
         DebateMatch::query()
             ->with('result')
+            ->when($roundIds !== [], fn ($query) => $query->whereIn('round_id', $roundIds))
             ->get()
             ->each(function (DebateMatch $match) use (&$rows): void {
                 $result = $match->result;
@@ -101,6 +109,7 @@ class RankingService
                 $scores = collect($row['_scores']);
 
                 $row['average_margin'] = round((float) $margins->avg(), 1);
+                $row['total_margin'] = round((float) $margins->sum(), 1);
                 $row['average_team_score'] = round((float) $scores->avg(), 1);
 
                 unset($row['_margins'], $row['_scores']);
@@ -151,15 +160,21 @@ class RankingService
     }
 
     /**
+     * @param  array<int, int>  $roundIds
      * @return Collection<int, array<string, mixed>>
      */
-    public function speakerRankings(): Collection
+    public function speakerRankings(array $roundIds = []): Collection
     {
+        $roundIds = array_values(array_unique(array_map('intval', $roundIds)));
         $members = TeamMember::query()->with('team')->get();
 
-        $appearanceScores = $this->appearanceScores();
+        $appearanceScores = $this->appearanceScores($roundIds);
         $speakerVoteCounts = MatchResult::query()
             ->whereNotNull('best_speaker_member_id')
+            ->when($roundIds !== [], fn ($query) => $query->whereHas(
+                'match',
+                fn ($query) => $query->whereIn('round_id', $roundIds),
+            ))
             ->pluck('best_speaker_member_id')
             ->countBy();
 
@@ -185,14 +200,16 @@ class RankingService
     }
 
     /**
+     * @param  array<int, int>  $roundIds
      * @return array<int, array<int, array<string, float>>>
      */
-    protected function appearanceScores(): array
+    protected function appearanceScores(array $roundIds = []): array
     {
         $scoresByMember = [];
 
         DebateMatch::query()
             ->with(['governmentTeam.members', 'oppositionTeam.members', 'matchSpeakers.teamMember'])
+            ->when($roundIds !== [], fn ($query) => $query->whereIn('round_id', $roundIds))
             ->get()
             ->each(function (DebateMatch $match) use (&$scoresByMember): void {
                 $submittedSheets = ScoreSheet::query()
